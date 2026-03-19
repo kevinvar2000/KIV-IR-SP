@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import requests
 import time
 import hashlib
+from pathlib import Path
 
 
 INIT_URL = 'https://www.interez.sk/'
@@ -23,6 +24,11 @@ REQUEST_HEADERS = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
 }
 REQUEST_DELAY = 3  # seconds, maybe random between 1 and 3/5 seconds to be more polite
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = BASE_DIR / 'data' / 'crawler'
+STATE_FILE = DATA_DIR / 'crawler_state.json'
+OUTPUT_FILE = DATA_DIR / 'crawled_pages.json'
 
 
 def index_url(url):
@@ -54,7 +60,9 @@ def is_allowed_by_robots(url):
 
 def save_state():
 
-    with open('crawler_state.json', 'w') as f:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    with open(STATE_FILE, 'w', encoding='utf-8') as f:
         state = {
             'pending_urls': PENDING_URLS,
             'visited_urls': VISITED_URLS,
@@ -67,7 +75,7 @@ def save_state():
 
 def load_state():
     try:
-        with open('crawler_state.json', 'r') as f:
+        with open(STATE_FILE, 'r', encoding='utf-8') as f:
             state = json.load(f)
             global PENDING_URLS, VISITED_URLS, ALLOWED_PATHS, DISALLOWED_PATHS, REQUEST_DELAY
             PENDING_URLS = state.get('pending_urls', [])
@@ -100,7 +108,8 @@ def store_data(url, content):
         'article_text': article_text,
         'scraped_at': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
     }
-    with open('crawled_pages.json', 'a', encoding='utf-8') as f:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(OUTPUT_FILE, 'a', encoding='utf-8') as f:
         f.write(json.dumps(data, ensure_ascii=False) + '\n')
 
 

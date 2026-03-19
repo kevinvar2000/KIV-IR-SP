@@ -1,5 +1,6 @@
 import math
 import re
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
@@ -298,5 +299,24 @@ def run_collection(file_path: str | Path) -> None:
 
 
 if __name__ == "__main__":
-    run_collection("test1.txt")
-    run_collection("test2.txt")
+    parser = argparse.ArgumentParser(description="Run TF-IDF search on one or more collection files.")
+    parser.add_argument(
+        "files",
+        nargs="*",
+        help="Input collection files. If omitted, tries tfidf/test1.txt and tfidf/test2.txt.",
+    )
+    args = parser.parse_args()
+
+    if args.files:
+        files = [Path(file) for file in args.files]
+    else:
+        base = Path(__file__).resolve().parent
+        files = [base / "test1.txt", base / "test2.txt"]
+
+    existing_files = [path for path in files if path.exists()]
+    if not existing_files:
+        print("No input files found for TF-IDF run.")
+        print("Provide files explicitly, e.g.: python tfidf/tfidf_search.py tfidf/example.txt")
+    else:
+        for file_path in existing_files:
+            run_collection(file_path)

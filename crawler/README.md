@@ -31,7 +31,7 @@ python crawler.py
 
 The crawler will:
 
-1. Attempt to load a previously saved state from `crawler_state.json`.
+1. Attempt to load a previously saved state from `data/crawler/crawler_state.json`.
 2. If no saved state exists, fetch `robots.txt` and the sitemap to seed the URL queue.
 3. Crawl pages from the pending URL queue, extracting metadata and discovering new links.
 4. Save progress after each page so it can be resumed later.
@@ -40,8 +40,8 @@ The crawler will:
 
 | File | Description |
 |---|---|
-| `crawled_pages.json` | One JSON object per line containing extracted metadata for each crawled page. |
-| `crawler_state.json` | Crawler state (pending URLs, visited URLs, configuration) for resuming. |
+| `data/crawler/crawled_pages.json` | One JSON object per line containing extracted metadata for each crawled page. |
+| `data/crawler/crawler_state.json` | Crawler state (pending URLs, visited URLs, configuration) for resuming. |
 
 ### Crawled page entry format
 
