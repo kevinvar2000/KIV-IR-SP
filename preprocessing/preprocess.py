@@ -3,7 +3,10 @@ import unicodedata
 
 import simplemma
 
-from tokenizer import Token, TokenType
+try:
+    from .tokenizer import Token, TokenType
+except ImportError:
+    from tokenizer import Token, TokenType
 
 # Czech stopwords – standard list used in Czech NLP / IR
 CZECH_STOPWORDS: set[str] = {
