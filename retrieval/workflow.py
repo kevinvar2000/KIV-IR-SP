@@ -3,11 +3,11 @@ from pathlib import Path
 try:
     from .dataset import CollectionParser, Preprocessor
     from .reporting import build_term_breakdown_rows, render_table
-    from .scoring import CosineScorer, InvertedIndex
+    from .tfidf import CosineScorer, InvertedIndex
 except ImportError:
     from dataset import CollectionParser, Preprocessor
     from reporting import build_term_breakdown_rows, render_table
-    from scoring import CosineScorer, InvertedIndex
+    from tfidf import CosineScorer, InvertedIndex
 
 
 def run_collection(file_path: str | Path) -> None:

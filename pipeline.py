@@ -1,6 +1,6 @@
 import argparse
 
-from app_config import CRAWLER_SCRIPT, PREPROCESSING_SCRIPT, TFIDF_SCRIPT
+from app_config import CRAWLER_SCRIPT, PREPROCESSING_SCRIPT, RETRIEVAL_SCRIPT
 from runner import run_crawler_background, run_step
 
 
@@ -23,13 +23,14 @@ def run_non_interactive(args: argparse.Namespace) -> int:
                 *(["--text-key", args.text_key] if args.text_key else []),
             ],
         ),
-        "tfidf": ("tfidf", TFIDF_SCRIPT, args.tfidf_files),
+        "retrieval": ("retrieval", RETRIEVAL_SCRIPT, args.retrieval_files),
+        "tfidf": ("retrieval", RETRIEVAL_SCRIPT, args.retrieval_files),
     }
 
     if args.stage == "all":
-        order = ["crawler", "preprocessing", "tfidf"]
+        order = ["crawler", "preprocessing", "retrieval"]
     else:
-        order = [args.stage]
+        order = ["retrieval" if args.stage == "tfidf" else args.stage]
 
     last_exit = 0
     for stage_key in order:

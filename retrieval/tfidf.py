@@ -122,24 +122,30 @@ class CosineScorer:
         return tf, vector, norm
 
     def search(self, query_text: str) -> List[Tuple[str, float]]:
-        """Score every document with the direct cosine formula and return ranked results."""
+        """Score documents that contain query terms using inverted index and return ranked results."""
 
-        _, query_vector, query_norm = self.build_query_vector(query_text)
+        query_tf, query_vector, query_norm = self.build_query_vector(query_text)
         if query_norm == 0:
             return []
 
-        # Compute cosine similarity directly for every document (manual-style formula).
+        # Use inverted index to find candidate documents containing at least one query term.
+        candidate_docs: set[str] = set()
+        for term in query_tf.keys():
+            if term in self.index.postings:
+                candidate_docs.update(self.index.postings[term].keys())
+
+        # Score only candidate documents (those containing at least one query term).
         scored = [
             (
                 doc_id,
                 cosine_similarity(
                     query_vector,
                     query_norm,
-                    doc_vector,
+                    self.index.doc_vectors[doc_id],
                     self.index.doc_norms[doc_id],
                 ),
             )
-            for doc_id, doc_vector in self.index.doc_vectors.items()
+            for doc_id in candidate_docs
         ]
         scored = [(doc_id, score) for doc_id, score in scored if score > 0]
         scored.sort(key=lambda x: (-x[1], x[0]))

@@ -24,14 +24,16 @@ A modular Python pipeline for web crawling, text preprocessing, and TF-IDF based
 │   ├── tokenizer.py       # Tokenization & token classification
 │   └── README.md
 │
-├── tfidf/
-│   ├── main.py            # CLI entry point (thin dispatcher)
+├── retrieval/
+│   ├── __init__.py        # Package marker
+│   ├── dataset.py         # Shared collection parsing & tokenization
+│   ├── reporting.py       # Shared ASCII table rendering helpers
+│   ├── tfidf.py           # TF-IDF index/scorer implementation
+│   ├── scoring.py         # Backward-compatible TF-IDF exports
+│   ├── workflow.py        # TF-IDF workflow orchestration
 │   ├── tfidf_search.py    # TF-IDF search entry point
-│   ├── cli.py             # Argument parsing
-│   ├── dataset.py         # Collection parsing & tokenization
-│   ├── scoring.py         # Inverted index, cosine similarity, ranking
-│   ├── reporting.py       # ASCII table rendering & term breakdowns
-│   ├── workflow.py        # End-to-end pipeline orchestration
+│   ├── boolean.py         # Boolean index/scorer implementation
+│   ├── boolean_search.py  # Boolean search entry point
 │   ├── test1.txt          # Example collection
 │   ├── test2.txt          # Example collection
 │   └── README.md
@@ -113,18 +115,18 @@ python preprocessing/main.py --list-text-keys
 - Vocabulary files: `data/preprocessed/vocab_<pipeline>.txt` (term frequency sorted)
 - Compatibility vocab: `data/preprocessed/vocab.txt` (baseline)
 
-### 3. Search with TF-IDF
+### 3. Information Retrieval Search
 
-Run TF-IDF search on example collections:
+Run information retrieval search on example collections (TF-IDF by default):
 
 ```bash
-python tfidf/tfidf_search.py
+python retrieval/tfidf_search.py
 ```
 
 Or provide custom files:
 
 ```bash
-python tfidf/tfidf_search.py tfidf/test1.txt tfidf/test2.txt
+python retrieval/tfidf_search.py retrieval/test1.txt retrieval/test2.txt
 ```
 
 **Import format for collections:**
@@ -164,8 +166,8 @@ python main.py -h
 - `interactive` (default) — menu-driven pipeline
 - `crawler` — run web crawler
 - `preprocessing` — run text preprocessing
-- `tfidf` — TF-IDF search
-- `all` — crawler → preprocessing → tfidf
+- `retrieval` — Information retrieval search (TF-IDF, boolean, etc.)
+- `all` — crawler → preprocessing → retrieval
 
 Example:
 
@@ -193,14 +195,14 @@ python preprocessing/main.py --input data/crawler/crawled_pages.json \
                               --output-dir data/preprocessed
 ```
 
-### TF-IDF
+### Information Retrieval
 
 ```bash
-python tfidf/tfidf_search.py
-python -m tfidf.tfidf_search
+python retrieval/tfidf_search.py
+python -m retrieval.tfidf_search
 
 # With custom collection:
-python tfidf/tfidf_search.py my_collection.txt
+python retrieval/tfidf_search.py my_collection.txt
 ```
 
 ## Configuration
@@ -211,7 +213,7 @@ python tfidf/tfidf_search.py my_collection.txt
 ROOT = Path(__file__).resolve().parent
 CRAWLER_SCRIPT = ROOT / "crawler" / "crawler.py"
 PREPROCESSING_SCRIPT = ROOT / "preprocessing" / "main.py"
-TFIDF_SCRIPT = ROOT / "tfidf" / "tfidf_search.py"
+RETRIEVAL_SCRIPT = ROOT / "retrieval" / "tfidf_search.py"
 
 DEFAULT_INPUT = ROOT / "data" / "crawler" / "crawled_pages.json"
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "preprocessed"
@@ -271,7 +273,7 @@ python preprocessing/main.py \
   --output-dir data/preprocessed
 ```
 
-### Search with TF-IDF
+### Information Retrieval Search
 
 1. Create a collection file (JSONL-style):
 
@@ -285,7 +287,7 @@ q2: JavaScript frameworks
 2. Run search:
 
 ```bash
-python tfidf/tfidf_search.py my_collection.txt
+python retrieval/tfidf_search.py my_collection.txt
 ```
 
 3. Review output:
@@ -314,7 +316,22 @@ BASE_STEPS.append(MyPreprocessor())
 
 ### Extending Extraction Logic
 
-Edit `tfidf/dataset.py` (`CollectionParser`) or crawler extraction functions in `crawler/crawler.py`.
+Edit `retrieval/dataset.py` (`CollectionParser`) or crawler extraction functions in `crawler/crawler.py`.
+
+### Inverted Index Optimization (TF-IDF Retrieval)
+
+The `retrieval/scoring.py` module uses a **dictionary-based inverted index** (`postings`) to optimize search performance. Instead of scoring every document in the collection, the `CosineScorer.search()` method:
+
+1. **Extracts query terms** from the query text
+2. **Uses the inverted index** to find candidate documents that contain at least one query term
+3. **Scores only candidates** rather than all documents
+
+This significantly improves efficiency for large collections by reducing unnecessary similarity computations.
+
+**Key data structures in `InvertedIndex`:**
+- `postings: Dict[str, Dict[str, int]]` — maps each term to documents containing it with term frequencies
+- `doc_vectors, doc_norms` — precomputed TF-IDF vectors for cosine similarity
+- `idf` — precomputed inverse document frequency for each term
 
 ### Running Tests
 
@@ -327,8 +344,8 @@ No test suite yet — consider adding pytest for:
 ## Troubleshooting
 
 **"No input files found for TF-IDF run"**
-- Ensure `tfidf/test1.txt` and `tfidf/test2.txt` exist, or provide file paths
-- Example: `python tfidf/tfidf_search.py my_file.txt`
+- Ensure `retrieval/test1.txt` and `retrieval/test2.txt` exist, or provide file paths
+- Example: `python retrieval/tfidf_search.py my_file.txt`
 
 **"Unable to determine text key automatically"**
 - Your crawler output doesn't have `article_text`, `text`, or detectable keys

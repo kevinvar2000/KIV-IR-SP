@@ -6,7 +6,7 @@ from app_config import (
     CRAWLER_SCRIPT,
     PIPELINE_OPTIONS,
     PREPROCESSED_DIR,
-    TFIDF_SCRIPT,
+    RETRIEVAL_SCRIPT,
     ROOT,
 )
 from runner import run_crawler_background, run_step
@@ -140,25 +140,46 @@ def run_preprocessing_interactive() -> int:
     return run_step("preprocessing", PREPROCESSING_SCRIPT, cmd_args)
 
 
-def run_tfidf_interactive() -> int:
-    default_files = [str(path) for path in sorted((ROOT / "tfidf").glob("*.txt"))]
+def list_data_collection_files() -> list[Path]:
+    data_dir = ROOT / "data"
+    if not data_dir.exists():
+        return []
 
-    if default_files:
-        print("\nDetected TF-IDF candidate files:")
-        for path in default_files:
-            print(f"- {path}")
+    return sorted(path for path in data_dir.rglob("*.txt") if path.is_file())
+
+
+def run_retrieval_interactive() -> int:
+    discovered_files = list_data_collection_files()
+
+    if discovered_files:
+        print("\nFound collection files in data/:")
+        for idx, path in enumerate(discovered_files, start=1):
+            print(f"{idx}. {path.relative_to(ROOT)}")
+    else:
+        print("\nNo .txt collection files found under data/.")
 
     raw = ask_input(
-        "Enter TF-IDF input files (comma-separated) or leave blank for defaults",
+        "Select numbers (comma-separated) or write file paths from project root",
         "",
     )
 
+    files: list[str] = []
     if raw.strip():
-        files = [item.strip() for item in raw.split(",") if item.strip()]
+        for item in [part.strip() for part in raw.split(",") if part.strip()]:
+            if item.isdigit() and discovered_files:
+                idx = int(item)
+                if 1 <= idx <= len(discovered_files):
+                    files.append(str(discovered_files[idx - 1]))
+            else:
+                files.append(str(ROOT / item))
     else:
-        files = default_files
+        files = [str(path) for path in discovered_files]
 
-    return run_step("tfidf", TFIDF_SCRIPT, files)
+    if not files:
+        print("No retrieval input files selected.")
+        return 1
+
+    return run_step("retrieval", RETRIEVAL_SCRIPT, files)
 
 
 def interactive_mode() -> int:
@@ -182,9 +203,9 @@ def interactive_mode() -> int:
         print("1. crawler (foreground)")
         print("2. crawler (background)")
         print("3. preprocessing")
-        print("4. tfidf")
-        print("5. preprocessing -> tfidf")
-        print("6. all (crawler -> preprocessing -> tfidf)")
+        print("4. retrieval")
+        print("5. preprocessing -> retrieval")
+        print("6. all (crawler -> preprocessing -> retrieval)")
         print("0. exit")
 
         choice = ask_input("Choose", "3")
@@ -201,12 +222,12 @@ def interactive_mode() -> int:
             run_preprocessing_interactive()
             continue
         if choice == "4":
-            run_tfidf_interactive()
+            run_retrieval_interactive()
             continue
         if choice == "5":
             rc = run_preprocessing_interactive()
-            if rc == 0 and ask_yes_no("Continue with TF-IDF now?", default_yes=True):
-                run_tfidf_interactive()
+            if rc == 0 and ask_yes_no("Continue with retrieval now?", default_yes=True):
+                run_retrieval_interactive()
             continue
         if choice == "6":
             rc = run_step("crawler", CRAWLER_SCRIPT)
@@ -215,8 +236,8 @@ def interactive_mode() -> int:
             rc = run_preprocessing_interactive()
             if rc != 0:
                 continue
-            if ask_yes_no("Continue with TF-IDF now?", default_yes=True):
-                run_tfidf_interactive()
+            if ask_yes_no("Continue with retrieval now?", default_yes=True):
+                run_retrieval_interactive()
             continue
 
         print("Invalid menu option.")

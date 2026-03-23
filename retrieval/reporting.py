@@ -1,9 +1,9 @@
 from typing import Dict, List
 
 try:
-    from .scoring import InvertedIndex
+    from .tfidf import InvertedIndex
 except ImportError:
-    from scoring import InvertedIndex
+    from tfidf import InvertedIndex
 
 
 def render_table(headers: List[str], rows: List[List[str]]) -> str:

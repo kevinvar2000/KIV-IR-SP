@@ -11,14 +11,16 @@ def parse_args() -> argparse.Namespace:
         "stage",
         nargs="?",
         default="interactive",
-        choices=["interactive", "all", "crawler", "preprocessing", "tfidf"],
+        choices=["interactive", "all", "crawler", "preprocessing", "retrieval", "tfidf"],
         help="Which stage to run. Default is interactive mode.",
     )
     parser.add_argument(
+        "--retrieval-files",
         "--tfidf-files",
+        dest="retrieval_files",
         nargs="*",
         default=None,
-        help="Optional input files for TF-IDF stage.",
+        help="Optional input files for retrieval stage (TF-IDF currently).",
     )
     parser.add_argument(
         "--text-key",
