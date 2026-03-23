@@ -82,9 +82,13 @@ def choose_from_list(title: str, options: list[str], default_index: int = 1) -> 
 
 def choose_pipelines() -> list[str]:
     print("\nAvailable preprocessing pipelines:")
-    for idx, option in enumerate(PIPELINE_OPTIONS, start=1):
-        print(f"{idx}. {option}")
-    print(f"{len(PIPELINE_OPTIONS) + 1}. all")
+    print("1. baseline (lowercase, remove punct/tags/URLs, remove stopwords, min-length 2)")
+    print("2. stemming (baseline + Czech stemming)")
+    print("3. lemmatization (baseline + Czech lemmatization)")
+    print("4. stemming_no_diacritics (baseline + stemming + remove accents)")
+    print("5. lemmatization_no_diacritics (baseline + lemmatization + remove accents)")
+    print(f"{len(PIPELINE_OPTIONS) + 1}. all (runs all pipelines)")
+    print("\nNote: All pipelines use the baseline steps. Options 2-5 add additional processing on top.")
 
     raw = ask_input("Choose one or more numbers (comma-separated)", str(len(PIPELINE_OPTIONS) + 1))
     parts = [part.strip() for part in raw.split(",") if part.strip()]

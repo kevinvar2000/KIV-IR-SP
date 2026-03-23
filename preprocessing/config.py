@@ -38,6 +38,12 @@ PIPELINE_NAMES = [
 ]
 
 # Shared base steps used by every pipeline
+# These steps are applied to ALL pipelines:
+# 1. Lowercase: convert text to lowercase
+# 2. RemoveTokenTypes: remove punctuation, HTML tags, and URLs
+# 3. StopwordPreprocessor: remove common Czech stopwords
+# 4. MinLengthPreprocessor: keep only terms with 2+ characters
+# Other pipelines (stemming, lemmatization, etc.) add additional processing on top of these.
 BASE_STEPS = [
     LowercasePreprocessor(),
     RemoveTokenTypesPreprocessor({TokenType.PUNCT, TokenType.TAG, TokenType.URL}),
