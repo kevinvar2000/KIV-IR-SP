@@ -25,6 +25,11 @@ class Preprocessor:
 class CollectionParser:
     """Parses files containing lines like `d1: ...` and `q1: ...`."""
 
+    @staticmethod
+    def _looks_like_vocab_line(line: str) -> bool:
+        parts = line.split()
+        return len(parts) == 2 and parts[1].isdigit()
+
     def parse(self, file_path: str | Path) -> Collection:
         """Load one text file and split lines into documents and queries."""
 
@@ -38,6 +43,12 @@ class CollectionParser:
                 continue
 
             if ":" not in stripped:
+                if self._looks_like_vocab_line(stripped):
+                    raise ValueError(
+                        f"Invalid retrieval input format in {path.name}: '{line}'. "
+                        "This looks like a preprocessing vocabulary file ('term count'). "
+                        "Retrieval expects collection lines such as 'd1: ...' and 'q1: ...'."
+                    )
                 raise ValueError(f"Invalid line in {path.name}: {line}")
 
             key, value = stripped.split(":", maxsplit=1)

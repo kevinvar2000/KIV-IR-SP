@@ -1,6 +1,6 @@
 import argparse
 
-from app_config import CRAWLER_SCRIPT, PREPROCESSING_SCRIPT, RETRIEVAL_SCRIPT
+from app_config import CRAWLER_SCRIPT, INDEXING_SCRIPT, PREPROCESSING_SCRIPT, RETRIEVAL_SCRIPT
 from runner import run_crawler_background, run_step
 
 
@@ -23,12 +23,42 @@ def run_non_interactive(args: argparse.Namespace) -> int:
                 *(["--text-key", args.text_key] if args.text_key else []),
             ],
         ),
-        "retrieval": ("retrieval", RETRIEVAL_SCRIPT, args.retrieval_files),
-        "tfidf": ("retrieval", RETRIEVAL_SCRIPT, args.retrieval_files),
+        "indexing": (
+            "indexing",
+            INDEXING_SCRIPT,
+            [
+                "--pipeline",
+                args.index_pipeline,
+                *(["--input", args.index_input] if args.index_input else []),
+                *(["--output", args.index_output] if args.index_output else []),
+            ],
+        ),
+        "retrieval": (
+            "retrieval",
+            RETRIEVAL_SCRIPT,
+            [
+                *(args.retrieval_files or []),
+                *(["--index-file", args.index_file] if args.index_file else ["--pipeline", args.index_pipeline]),
+                *(["--query", args.query] if args.query else []),
+                "--top-k",
+                str(args.top_k),
+            ],
+        ),
+        "tfidf": (
+            "retrieval",
+            RETRIEVAL_SCRIPT,
+            [
+                *(args.retrieval_files or []),
+                *(["--index-file", args.index_file] if args.index_file else ["--pipeline", args.index_pipeline]),
+                *(["--query", args.query] if args.query else []),
+                "--top-k",
+                str(args.top_k),
+            ],
+        ),
     }
 
     if args.stage == "all":
-        order = ["crawler", "preprocessing", "retrieval"]
+        order = ["crawler", "preprocessing", "indexing", "retrieval"]
     else:
         order = ["retrieval" if args.stage == "tfidf" else args.stage]
 

@@ -11,7 +11,7 @@ def parse_args() -> argparse.Namespace:
         "stage",
         nargs="?",
         default="interactive",
-        choices=["interactive", "all", "crawler", "preprocessing", "retrieval", "tfidf"],
+        choices=["interactive", "all", "crawler", "preprocessing", "indexing", "retrieval", "tfidf"],
         help="Which stage to run. Default is interactive mode.",
     )
     parser.add_argument(
@@ -52,5 +52,36 @@ def parse_args() -> argparse.Namespace:
         "--continue-on-error",
         action="store_true",
         help="Continue with next stages even if one fails (applies to stage=all).",
+    )
+    parser.add_argument(
+        "--index-pipeline",
+        default="baseline",
+        help="Pipeline name used for indexing/retrieval index file naming.",
+    )
+    parser.add_argument(
+        "--index-input",
+        default=None,
+        help="Optional preprocessed docs JSONL path for indexing stage.",
+    )
+    parser.add_argument(
+        "--index-output",
+        default=None,
+        help="Optional output index JSON path for indexing stage.",
+    )
+    parser.add_argument(
+        "--index-file",
+        default=None,
+        help="Optional index JSON file for retrieval stage.",
+    )
+    parser.add_argument(
+        "--query",
+        default=None,
+        help="Optional query text for retrieval stage.",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=10,
+        help="Top-K documents to show for retrieval query mode.",
     )
     return parser.parse_args()

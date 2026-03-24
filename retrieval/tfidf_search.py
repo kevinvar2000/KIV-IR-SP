@@ -1,9 +1,23 @@
 import argparse
+import json
+import sys
 from pathlib import Path
 
 try:
+    from app_config import INDEX_DIR
+    from preprocessing.config import build_pipelines
+    from preprocessing.tokenizer import RegexMatchTokenizer
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from app_config import INDEX_DIR
+    from preprocessing.config import build_pipelines
+    from preprocessing.tokenizer import RegexMatchTokenizer
+
+try:
+    from .tfidf import CosineScorer, InvertedIndex
     from .workflow import run_collection
 except ImportError:
+    from tfidf import CosineScorer, InvertedIndex
     from workflow import run_collection
 
 
@@ -17,13 +31,109 @@ def resolve_input_files(input_files: list[str]) -> list[Path]:
     return [path for path in files if path.exists()]
 
 
+def resolve_index_file(index_file: str | None, pipeline: str) -> Path:
+    if index_file:
+        return Path(index_file)
+    return INDEX_DIR / f"inverted_index_{pipeline}.json"
+
+
+def load_index_payload(index_path: Path) -> tuple[InvertedIndex, dict]:
+    if not index_path.exists():
+        raise FileNotFoundError(f"Index file not found: {index_path}")
+
+    with index_path.open("r", encoding="utf-8") as file_handle:
+        loaded = json.load(file_handle)
+
+    if not isinstance(loaded, dict):
+        raise ValueError(f"Invalid index format in {index_path}")
+
+    if "index" in loaded and isinstance(loaded["index"], dict):
+        index_data = loaded["index"]
+        meta = loaded.get("meta", {}) if isinstance(loaded.get("meta", {}), dict) else {}
+    else:
+        index_data = loaded
+        meta = {}
+
+    return InvertedIndex.from_dict(index_data), meta
+
+
+class PipelineQueryPreprocessor:
+    """Apply the same preprocessing pipeline to queries as used for index generation."""
+
+    def __init__(self, pipeline_name: str):
+        pipelines = build_pipelines()
+        if pipeline_name not in pipelines:
+            raise ValueError(f"Unknown preprocessing pipeline for query mode: {pipeline_name}")
+        self.pipeline = pipelines[pipeline_name]
+        self.tokenizer = RegexMatchTokenizer()
+
+    def tokenize(self, text: str) -> list[str]:
+        tokens = self.tokenizer.tokenize(text)
+        tokens = self.pipeline.preprocess(tokens, text)
+        return [token.processed_form for token in tokens if token.processed_form]
+
+
+def run_index_query_mode(index_path: Path, pipeline_name: str, query: str | None, top_k: int) -> int:
+    index, meta = load_index_payload(index_path)
+
+    resolved_pipeline = str(meta.get("pipeline") or pipeline_name)
+    query_preprocessor = PipelineQueryPreprocessor(resolved_pipeline)
+
+    print(f"[retrieval] loaded index: {index_path}")
+    print(f"[retrieval] pipeline: {resolved_pipeline}")
+    print(f"[retrieval] docs={index.num_docs} terms={len(index.postings)}")
+
+    if not query:
+        print("[retrieval] no query provided. Use --query to run search against this index.")
+        return 0
+
+    scorer = CosineScorer(index, query_preprocessor)
+    ranked = scorer.search(query)
+    limited = ranked[: max(top_k, 1)]
+
+    print(f"\nQuery: {query}")
+    if not limited:
+        print("No matching documents.")
+        return 0
+
+    print("Top results:")
+    for rank, (doc_id, score) in enumerate(limited, start=1):
+        print(f"{rank}. {doc_id} -> {score:.6f}")
+    return 0
+
+
+def _looks_like_collection_file(path: Path, max_lines: int = 30) -> bool:
+    if path.name.lower().startswith("vocab"):
+        return False
+
+    try:
+        with path.open("r", encoding="utf-8") as file_handle:
+            seen_non_empty = 0
+            for line in file_handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                seen_non_empty += 1
+                if ":" in stripped:
+                    prefix = stripped.split(":", maxsplit=1)[0].strip().lower()
+                    if prefix.startswith("d") or prefix.startswith("q"):
+                        return True
+                if seen_non_empty >= max_lines:
+                    break
+    except OSError:
+        return False
+
+    return False
+
+
 def list_data_files() -> list[Path]:
     root = Path(__file__).resolve().parent.parent
     data_dir = root / "data"
     if not data_dir.exists():
         return []
 
-    return sorted(path for path in data_dir.rglob("*.txt") if path.is_file())
+    txt_files = sorted(path for path in data_dir.rglob("*.txt") if path.is_file())
+    return [path for path in txt_files if _looks_like_collection_file(path)]
 
 
 def choose_files_from_data_folder() -> list[Path]:
@@ -69,18 +179,38 @@ def main() -> int:
         "files",
         nargs="*",
         help=(
-            "Input collection files (paths from project root). "
-            "If omitted, you can choose files from data/ interactively; "
-            "fallback is retrieval/test1.txt and retrieval/test2.txt."
+            "Legacy mode input collection files using d*/q* lines. "
+            "If provided, retrieval runs in collection-file compatibility mode."
         ),
+    )
+    parser.add_argument(
+        "--index-file",
+        default=None,
+        help="Index JSON file path. Default: data/index/inverted_index_<pipeline>.json",
+    )
+    parser.add_argument(
+        "--pipeline",
+        default="baseline",
+        help="Pipeline name for default index path and query preprocessing (when metadata absent).",
+    )
+    parser.add_argument(
+        "--query",
+        default=None,
+        help="Query string for index-based retrieval mode.",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=10,
+        help="Number of top results shown in index-based query mode.",
     )
     args = parser.parse_args()
 
-    existing_files = resolve_input_files(args.files)
     if not args.files:
-        chosen_files = choose_files_from_data_folder()
-        if chosen_files:
-            existing_files = chosen_files
+        index_path = resolve_index_file(args.index_file, args.pipeline)
+        return run_index_query_mode(index_path, args.pipeline, args.query, args.top_k)
+
+    existing_files = resolve_input_files(args.files)
 
     if not existing_files:
         print("No input files found for TF-IDF run.")

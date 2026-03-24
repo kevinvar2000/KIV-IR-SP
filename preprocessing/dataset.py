@@ -39,6 +39,13 @@ def write_weighted_vocab(vocab, file):
         file.write(f"{key} {value}\n")
 
 
+def write_jsonl_records(records: Iterable[dict], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as file_handle:
+        for record in records:
+            file_handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
 def load_records(input_path: Path) -> list[dict]:
     if not input_path.exists():
         raise FileNotFoundError(f"Input file does not exist: {input_path}")
@@ -86,10 +93,17 @@ def detect_text_keys(records: list[dict], sample_limit: int = 200) -> list[str]:
 
 def normalize_docs(records: list[dict], text_key: str) -> list[dict]:
     docs: list[dict] = []
-    for row in records:
+    for idx, row in enumerate(records, start=1):
         if not isinstance(row, dict):
             continue
         value = row.get(text_key)
         if isinstance(value, str) and value.strip():
-            docs.append({"text": value})
+            doc_id = row.get("doc_id") or row.get("id") or row.get("url") or f"doc_{idx}"
+            docs.append(
+                {
+                    "doc_id": str(doc_id),
+                    "url": row.get("url"),
+                    "text": value,
+                }
+            )
     return docs

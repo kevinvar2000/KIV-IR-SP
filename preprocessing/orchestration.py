@@ -37,17 +37,29 @@ def process_pipeline(
     raw_docs: list[dict],
     tokenizer: Tokenizer,
     progress_every: int = 1000,
-) -> dict:
+) -> tuple[dict, list[dict]]:
     total_docs = len(raw_docs)
     print(f"[{pipeline_name}] start | docs={total_docs}")
 
     t0 = time.perf_counter()
     documents: list[Document] = []
+    normalized_docs: list[dict] = []
 
     # Tokenize + preprocess in one pass to reduce peak memory and show progress.
     for i, raw in enumerate(raw_docs, start=1):
         doc = Document(raw["text"]).tokenize(tokenizer).preprocess(pipeline)
         documents.append(doc)
+
+        processed_tokens = [token.processed_form for token in doc.tokens if token.processed_form]
+        normalized_docs.append(
+            {
+                "doc_id": raw["doc_id"],
+                "url": raw.get("url"),
+                "tokens": processed_tokens,
+                "normalized_text": " ".join(processed_tokens),
+            }
+        )
+
         if i % progress_every == 0 or i == total_docs:
             elapsed = time.perf_counter() - t0
             print(f"[{pipeline_name}] processed {i}/{total_docs} docs in {elapsed:.1f}s")
@@ -57,4 +69,4 @@ def process_pipeline(
     t_vocab = time.perf_counter() - t_vocab_start
     print(f"[{pipeline_name}] vocab built | terms={len(vocab)} | {t_vocab:.1f}s")
 
-    return vocab
+    return vocab, normalized_docs

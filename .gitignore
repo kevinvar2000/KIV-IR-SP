@@ -21,9 +21,8 @@ Thumbs.db
 # Logs
 *.log
 
-# Generated project data (crawler/preprocessing outputs)
-data/crawler/
-data/preprocessed/
+# Generated project data
+data/*
 
 # Optional: keep empty dirs tracked if needed
 !data/**/.gitkeep

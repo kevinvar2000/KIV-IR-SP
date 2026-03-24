@@ -1,4 +1,6 @@
 import math
+import json
+from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
 
@@ -93,6 +95,63 @@ class InvertedIndex:
                 self.idf,
                 self.weighted_tf,
             )
+
+    def to_dict(self) -> Dict[str, object]:
+        """Serialize the index to a plain JSON-compatible dictionary."""
+
+        return {
+            "postings": self.postings,
+            "doc_term_freqs": self.doc_term_freqs,
+            "doc_freq": self.doc_freq,
+            "idf": self.idf,
+            "doc_vectors": self.doc_vectors,
+            "doc_norms": self.doc_norms,
+            "num_docs": self.num_docs,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, object]) -> "InvertedIndex":
+        """Construct an index from a dictionary produced by to_dict()."""
+
+        index = cls()
+        index.postings = {
+            str(term): {str(doc_id): int(tf) for doc_id, tf in docs.items()}
+            for term, docs in dict(payload.get("postings", {})).items()
+        }
+        index.doc_term_freqs = {
+            str(doc_id): {str(term): int(tf) for term, tf in terms.items()}
+            for doc_id, terms in dict(payload.get("doc_term_freqs", {})).items()
+        }
+        index.doc_freq = {str(term): int(df) for term, df in dict(payload.get("doc_freq", {})).items()}
+        index.idf = {str(term): float(idf) for term, idf in dict(payload.get("idf", {})).items()}
+        index.doc_vectors = {
+            str(doc_id): {str(term): float(weight) for term, weight in terms.items()}
+            for doc_id, terms in dict(payload.get("doc_vectors", {})).items()
+        }
+        index.doc_norms = {
+            str(doc_id): float(norm) for doc_id, norm in dict(payload.get("doc_norms", {})).items()
+        }
+        index.num_docs = int(payload.get("num_docs", 0))
+        return index
+
+    def save_json(self, file_path: str | Path) -> None:
+        """Persist index structures to a JSON file."""
+
+        path = Path(file_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as file_handle:
+            json.dump(self.to_dict(), file_handle, ensure_ascii=False)
+
+    @classmethod
+    def load_json(cls, file_path: str | Path) -> "InvertedIndex":
+        """Load index structures from a JSON file."""
+
+        path = Path(file_path)
+        with path.open("r", encoding="utf-8") as file_handle:
+            loaded = json.load(file_handle)
+        if not isinstance(loaded, dict):
+            raise ValueError("Invalid index JSON format. Expected an object.")
+        return cls.from_dict(loaded)
 
     @staticmethod
     def weighted_tf(tf: int) -> float:

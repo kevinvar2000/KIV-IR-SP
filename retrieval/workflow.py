@@ -1,3 +1,5 @@
+import hashlib
+import json
 from pathlib import Path
 
 try:
@@ -10,15 +12,82 @@ except ImportError:
     from tfidf import CosineScorer, InvertedIndex
 
 
+def _index_file_for_collection(file_path: str | Path) -> Path:
+    source = Path(file_path).resolve()
+    root = Path(__file__).resolve().parent.parent
+    index_dir = root / "data" / "index"
+    return index_dir / f"{source.stem}_inverted_index.json"
+
+
+def _documents_fingerprint(documents: dict[str, str]) -> str:
+    hasher = hashlib.sha256()
+    for doc_id in sorted(documents.keys()):
+        hasher.update(doc_id.encode("utf-8"))
+        hasher.update(b"\x00")
+        hasher.update(documents[doc_id].encode("utf-8"))
+        hasher.update(b"\x00")
+    return hasher.hexdigest()
+
+
+def _try_load_cached_index(index_path: Path, source_path: Path, documents: dict[str, str]) -> InvertedIndex | None:
+    if not index_path.exists():
+        return None
+
+    with index_path.open("r", encoding="utf-8") as file_handle:
+        payload = json.load(file_handle)
+
+    if not isinstance(payload, dict):
+        return None
+
+    meta = payload.get("meta")
+    data = payload.get("index")
+    if not isinstance(meta, dict) or not isinstance(data, dict):
+        return None
+
+    expected_count = len(documents)
+    expected_fingerprint = _documents_fingerprint(documents)
+    if int(meta.get("doc_count", -1)) != expected_count:
+        return None
+    if str(meta.get("documents_sha256", "")) != expected_fingerprint:
+        return None
+    if str(meta.get("source_file", "")) != str(source_path):
+        return None
+
+    return InvertedIndex.from_dict(data)
+
+
+def _save_index_cache(index_path: Path, source_path: Path, documents: dict[str, str], index: InvertedIndex) -> None:
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "meta": {
+            "source_file": str(source_path),
+            "doc_count": len(documents),
+            "documents_sha256": _documents_fingerprint(documents),
+        },
+        "index": index.to_dict(),
+    }
+    with index_path.open("w", encoding="utf-8") as file_handle:
+        json.dump(payload, file_handle, ensure_ascii=False)
+
+
 def run_collection(file_path: str | Path) -> None:
     """Run the full pipeline for one file and print all reports."""
 
     parser = CollectionParser()
     preprocessor = Preprocessor()
 
-    collection = parser.parse(file_path)
-    index = InvertedIndex()
-    index.build(collection.documents, preprocessor)
+    source_path = Path(file_path).resolve()
+    collection = parser.parse(source_path)
+    index_path = _index_file_for_collection(source_path)
+
+    index = _try_load_cached_index(index_path, source_path, collection.documents)
+    if index is None:
+        index = InvertedIndex()
+        index.build(collection.documents, preprocessor)
+        _save_index_cache(index_path, source_path, collection.documents, index)
+        print(f"[index] built and saved: {index_path}")
+    else:
+        print(f"[index] loaded from cache: {index_path}")
 
     scorer = CosineScorer(index, preprocessor)
 

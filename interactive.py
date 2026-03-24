@@ -4,6 +4,8 @@ from pathlib import Path
 from app_config import (
     CRAWLER_DATA_FILE,
     CRAWLER_SCRIPT,
+    INDEXING_SCRIPT,
+    INDEX_DIR,
     PIPELINE_OPTIONS,
     PREPROCESSED_DIR,
     RETRIEVAL_SCRIPT,
@@ -144,46 +146,62 @@ def run_preprocessing_interactive() -> int:
     return run_step("preprocessing", PREPROCESSING_SCRIPT, cmd_args)
 
 
-def list_data_collection_files() -> list[Path]:
-    data_dir = ROOT / "data"
-    if not data_dir.exists():
+def list_index_files() -> list[Path]:
+    if not INDEX_DIR.exists():
         return []
+    return sorted(path for path in INDEX_DIR.glob("inverted_index_*.json") if path.is_file())
 
-    return sorted(path for path in data_dir.rglob("*.txt") if path.is_file())
+
+def run_indexing_interactive() -> int:
+    pipeline_name = choose_from_list("Choose pipeline for indexing", PIPELINE_OPTIONS, 1)
+    input_default = PREPROCESSED_DIR / f"docs_{pipeline_name}.jsonl"
+    output_default = INDEX_DIR / f"inverted_index_{pipeline_name}.json"
+
+    cmd_args = [
+        "--pipeline",
+        pipeline_name,
+        "--input",
+        str(input_default),
+        "--output",
+        str(output_default),
+    ]
+    return run_step("indexing", INDEXING_SCRIPT, cmd_args)
 
 
 def run_retrieval_interactive() -> int:
-    discovered_files = list_data_collection_files()
+    index_files = list_index_files()
 
-    if discovered_files:
-        print("\nFound collection files in data/:")
-        for idx, path in enumerate(discovered_files, start=1):
+    if index_files:
+        print("\nFound index files in data/index:")
+        for idx, path in enumerate(index_files, start=1):
             print(f"{idx}. {path.relative_to(ROOT)}")
     else:
-        print("\nNo .txt collection files found under data/.")
+        print("\nNo index files found under data/index.")
+        if ask_yes_no("Build an index now?", default_yes=True):
+            rc = run_indexing_interactive()
+            if rc != 0:
+                return rc
+            index_files = list_index_files()
 
-    raw = ask_input(
-        "Select numbers (comma-separated) or write file paths from project root",
-        "",
-    )
-
-    files: list[str] = []
-    if raw.strip():
-        for item in [part.strip() for part in raw.split(",") if part.strip()]:
-            if item.isdigit() and discovered_files:
-                idx = int(item)
-                if 1 <= idx <= len(discovered_files):
-                    files.append(str(discovered_files[idx - 1]))
-            else:
-                files.append(str(ROOT / item))
-    else:
-        files = [str(path) for path in discovered_files]
-
-    if not files:
-        print("No retrieval input files selected.")
+    if not index_files:
+        print("No retrieval index available.")
         return 1
 
-    return run_step("retrieval", RETRIEVAL_SCRIPT, files)
+    default_idx = 1
+    if len(index_files) > 1:
+        for idx, path in enumerate(index_files, start=1):
+            if "baseline" in path.name:
+                default_idx = idx
+                break
+
+    selected = choose_from_list("Choose index file", [str(p.relative_to(ROOT)) for p in index_files], default_idx)
+    selected_path = ROOT / selected
+    query = ask_input("Enter query (leave empty to show index summary)", "")
+
+    cmd_args = ["--index-file", str(selected_path)]
+    if query:
+        cmd_args.extend(["--query", query])
+    return run_step("retrieval", RETRIEVAL_SCRIPT, cmd_args)
 
 
 def interactive_mode() -> int:
@@ -207,9 +225,10 @@ def interactive_mode() -> int:
         print("1. crawler (foreground)")
         print("2. crawler (background)")
         print("3. preprocessing")
-        print("4. retrieval")
-        print("5. preprocessing -> retrieval")
-        print("6. all (crawler -> preprocessing -> retrieval)")
+        print("4. indexing")
+        print("5. retrieval")
+        print("6. preprocessing -> indexing -> retrieval")
+        print("7. all (crawler -> preprocessing -> indexing -> retrieval)")
         print("0. exit")
 
         choice = ask_input("Choose", "3")
@@ -226,18 +245,27 @@ def interactive_mode() -> int:
             run_preprocessing_interactive()
             continue
         if choice == "4":
-            run_retrieval_interactive()
+            run_indexing_interactive()
             continue
         if choice == "5":
+            run_retrieval_interactive()
+            continue
+        if choice == "6":
             rc = run_preprocessing_interactive()
+            if rc != 0:
+                continue
+            rc = run_indexing_interactive()
             if rc == 0 and ask_yes_no("Continue with retrieval now?", default_yes=True):
                 run_retrieval_interactive()
             continue
-        if choice == "6":
+        if choice == "7":
             rc = run_step("crawler", CRAWLER_SCRIPT)
             if rc != 0:
                 continue
             rc = run_preprocessing_interactive()
+            if rc != 0:
+                continue
+            rc = run_indexing_interactive()
             if rc != 0:
                 continue
             if ask_yes_no("Continue with retrieval now?", default_yes=True):

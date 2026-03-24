@@ -7,14 +7,14 @@ try:
     from .dataset import load_records, detect_text_keys, normalize_docs
     from .orchestration import parse_pipeline_selection, process_pipeline
     from .tokenizer import RegexMatchTokenizer
-    from .dataset import write_weighted_vocab
+    from .dataset import write_weighted_vocab, write_jsonl_records
 except ImportError:
     from cli import parse_args
     from config import DEFAULT_INPUT, build_pipelines
     from dataset import load_records, detect_text_keys, normalize_docs
     from orchestration import parse_pipeline_selection, process_pipeline
     from tokenizer import RegexMatchTokenizer
-    from dataset import write_weighted_vocab
+    from dataset import write_weighted_vocab, write_jsonl_records
 
 
 def main() -> int:
@@ -64,28 +64,36 @@ def main() -> int:
     tokenizer = RegexMatchTokenizer()
     pipelines = build_pipelines()
     selected_pipeline_names = parse_pipeline_selection(args.pipelines)
+    pipeline_results: dict[str, tuple[dict, list[dict]]] = {}
 
     for name in selected_pipeline_names:
         p_start = time.perf_counter()
-        vocab = process_pipeline(name, pipelines[name], raw_docs, tokenizer, progress_every=args.progress_every)
-        out_path = output_dir / f"vocab_{name}.txt"
-        write_start = time.perf_counter()
-        with out_path.open("w", encoding="utf-8") as f:
-            write_weighted_vocab(vocab, f)
-        write_elapsed = time.perf_counter() - write_start
-        total_elapsed = time.perf_counter() - p_start
-        print(f"[{name}] wrote {out_path} in {write_elapsed:.1f}s")
-        print(f"[{name}] done | terms={len(vocab)} | total={total_elapsed:.1f}s")
-
-    if ("baseline" in selected_pipeline_names) and not args.no_compat_vocab:
-        compat_path = output_dir / "vocab.txt"
-        baseline_vocab = process_pipeline(
-            "baseline_compat",
-            pipelines["baseline"],
+        vocab, normalized_docs = process_pipeline(
+            name,
+            pipelines[name],
             raw_docs,
             tokenizer,
             progress_every=args.progress_every,
         )
+        pipeline_results[name] = (vocab, normalized_docs)
+
+        out_path = output_dir / f"vocab_{name}.txt"
+        write_start = time.perf_counter()
+        with out_path.open("w", encoding="utf-8") as f:
+            write_weighted_vocab(vocab, f)
+
+        docs_out_path = output_dir / f"docs_{name}.jsonl"
+        write_jsonl_records(normalized_docs, docs_out_path)
+
+        write_elapsed = time.perf_counter() - write_start
+        total_elapsed = time.perf_counter() - p_start
+        print(f"[{name}] wrote {out_path} in {write_elapsed:.1f}s")
+        print(f"[{name}] wrote {docs_out_path}")
+        print(f"[{name}] done | terms={len(vocab)} | total={total_elapsed:.1f}s")
+
+    if ("baseline" in selected_pipeline_names) and not args.no_compat_vocab:
+        compat_path = output_dir / "vocab.txt"
+        baseline_vocab, _ = pipeline_results["baseline"]
         with compat_path.open("w", encoding="utf-8") as f:
             write_weighted_vocab(baseline_vocab, f)
         print(f"[baseline_compat] wrote {compat_path}")

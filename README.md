@@ -24,6 +24,10 @@ A modular Python pipeline for web crawling, text preprocessing, and TF-IDF based
 │   ├── tokenizer.py       # Tokenization & token classification
 │   └── README.md
 │
+├── indexing/
+│   ├── __init__.py
+│   └── main.py            # Builds persisted inverted index from preprocessed docs
+│
 ├── retrieval/
 │   ├── __init__.py        # Package marker
 │   ├── dataset.py         # Shared collection parsing & tokenization
@@ -44,8 +48,11 @@ A modular Python pipeline for web crawling, text preprocessing, and TF-IDF based
 │   │   └── crawler_state.json
 │   └── preprocessed/
 │       ├── vocab_baseline.txt
+│       ├── docs_baseline.jsonl
 │       ├── vocab_stemming.txt
 │       └── ...
+│   └── index/
+│       └── inverted_index_baseline.json
 │
 └── app_config.py          # Root-level pipeline config
 ```
@@ -114,16 +121,40 @@ python preprocessing/main.py --list-text-keys
 **Output:**
 - Vocabulary files: `data/preprocessed/vocab_<pipeline>.txt` (term frequency sorted)
 - Compatibility vocab: `data/preprocessed/vocab.txt` (baseline)
+- Normalized docs per pipeline: `data/preprocessed/docs_<pipeline>.jsonl`
 
-### 3. Information Retrieval Search
+### 3. Indexing
 
-Run information retrieval search on example collections (TF-IDF by default):
+Build an inverted index from normalized preprocessed docs:
 
 ```bash
-python retrieval/tfidf_search.py
+python indexing/main.py --pipeline baseline
 ```
 
-Or provide custom files:
+Or through the main dispatcher:
+
+```bash
+python main.py indexing --index-pipeline baseline
+```
+
+**Output:**
+- Persisted index: `data/index/inverted_index_<pipeline>.json`
+
+### 4. Information Retrieval Search
+
+Run retrieval against persisted index:
+
+```bash
+python retrieval/tfidf_search.py --pipeline baseline --query "turistika tatry"
+```
+
+Or via the root CLI:
+
+```bash
+python main.py retrieval --index-pipeline baseline --query "turistika tatry" --top-k 10
+```
+
+Legacy compatibility mode (collection files with `d*/q*`) is still available:
 
 ```bash
 python retrieval/tfidf_search.py retrieval/test1.txt retrieval/test2.txt
@@ -166,8 +197,9 @@ python main.py -h
 - `interactive` (default) — menu-driven pipeline
 - `crawler` — run web crawler
 - `preprocessing` — run text preprocessing
-- `retrieval` — Information retrieval search (TF-IDF, boolean, etc.)
-- `all` — crawler → preprocessing → retrieval
+- `indexing` — build persisted inverted index
+- `retrieval` — query persisted index (or run legacy file mode)
+- `all` — crawler → preprocessing → indexing → retrieval
 
 Example:
 
