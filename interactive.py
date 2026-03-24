@@ -1,17 +1,37 @@
 import json
 from pathlib import Path
+import traceback
 
 from app_config import (
     CRAWLER_DATA_FILE,
-    CRAWLER_SCRIPT,
-    INDEXING_SCRIPT,
     INDEX_DIR,
     PIPELINE_OPTIONS,
     PREPROCESSED_DIR,
-    RETRIEVAL_SCRIPT,
     ROOT,
 )
-from runner import run_crawler_background, run_step
+from crawler.crawler import run_crawler
+from indexing.main import run_indexing_stage
+from preprocessing.main import run_preprocessing_stage
+from retrieval.tfidf_search import run_retrieval_stage
+from retrieval.query_interface import run_interactive_query_loop
+from runner import run_crawler_background
+
+
+def run_stage(name: str, fn) -> int:
+    print(f"\n[{name}] running (in-process)")
+    try:
+        result = fn()
+        exit_code = int(result) if result is not None else 0
+    except Exception:
+        print(f"[{name}] failed with unhandled exception")
+        traceback.print_exc()
+        return 1
+
+    if exit_code != 0:
+        print(f"[{name}] failed with exit code {exit_code}")
+    else:
+        print(f"[{name}] finished")
+    return exit_code
 
 
 def has_crawler_data() -> bool:
@@ -130,20 +150,15 @@ def run_preprocessing_interactive() -> int:
 
     pipelines = choose_pipelines()
 
-    cmd_args = [
-        "--input",
-        str(CRAWLER_DATA_FILE),
-        "--text-key",
-        text_key,
-        "--output-dir",
-        str(PREPROCESSED_DIR),
-        "--pipelines",
-        *pipelines,
-    ]
-
-    from app_config import PREPROCESSING_SCRIPT
-
-    return run_step("preprocessing", PREPROCESSING_SCRIPT, cmd_args)
+    return run_stage(
+        "preprocessing",
+        lambda: run_preprocessing_stage(
+            input_path=CRAWLER_DATA_FILE,
+            output_dir=PREPROCESSED_DIR,
+            text_key=text_key,
+            pipeline_selection=pipelines,
+        ),
+    )
 
 
 def list_index_files() -> list[Path]:
@@ -156,16 +171,14 @@ def run_indexing_interactive() -> int:
     pipeline_name = choose_from_list("Choose pipeline for indexing", PIPELINE_OPTIONS, 1)
     input_default = PREPROCESSED_DIR / f"docs_{pipeline_name}.jsonl"
     output_default = INDEX_DIR / f"inverted_index_{pipeline_name}.json"
-
-    cmd_args = [
-        "--pipeline",
-        pipeline_name,
-        "--input",
-        str(input_default),
-        "--output",
-        str(output_default),
-    ]
-    return run_step("indexing", INDEXING_SCRIPT, cmd_args)
+    return run_stage(
+        "indexing",
+        lambda: run_indexing_stage(
+            pipeline=pipeline_name,
+            input_path=input_default,
+            output_path=output_default,
+        ),
+    )
 
 
 def run_retrieval_interactive() -> int:
@@ -196,12 +209,9 @@ def run_retrieval_interactive() -> int:
 
     selected = choose_from_list("Choose index file", [str(p.relative_to(ROOT)) for p in index_files], default_idx)
     selected_path = ROOT / selected
-    query = ask_input("Enter query (leave empty to show index summary)", "")
 
-    cmd_args = ["--index-file", str(selected_path)]
-    if query:
-        cmd_args.extend(["--query", query])
-    return run_step("retrieval", RETRIEVAL_SCRIPT, cmd_args)
+    # Use the new interactive query loop
+    return run_interactive_query_loop(str(selected_path), pipeline="baseline")
 
 
 def interactive_mode() -> int:
@@ -211,9 +221,9 @@ def interactive_mode() -> int:
         print(f"No crawler data found at: {CRAWLER_DATA_FILE}")
         if ask_yes_no("Run crawler first now?", default_yes=True):
             if ask_yes_no("Run crawler in background?", default_yes=False):
-                run_crawler_background(CRAWLER_SCRIPT)
+                run_crawler_background()
                 return 0
-            rc = run_step("crawler", CRAWLER_SCRIPT)
+            rc = run_stage("crawler", run_crawler)
             if rc != 0:
                 return rc
         else:
@@ -224,11 +234,11 @@ def interactive_mode() -> int:
         print("\nWhat do you want to run?")
         print("1. crawler (foreground)")
         print("2. crawler (background)")
-        print("3. preprocessing")
+        print("3. preprocessing (auto-index)")
         print("4. indexing")
         print("5. retrieval")
-        print("6. preprocessing -> indexing -> retrieval")
-        print("7. all (crawler -> preprocessing -> indexing -> retrieval)")
+        print("6. preprocessing -> retrieval")
+        print("7. all (crawler -> preprocessing -> retrieval)")
         print("0. exit")
 
         choice = ask_input("Choose", "3")
@@ -236,10 +246,10 @@ def interactive_mode() -> int:
         if choice == "0":
             return 0
         if choice == "1":
-            run_step("crawler", CRAWLER_SCRIPT)
+            run_stage("crawler", run_crawler)
             continue
         if choice == "2":
-            run_crawler_background(CRAWLER_SCRIPT)
+            run_crawler_background()
             continue
         if choice == "3":
             run_preprocessing_interactive()
@@ -254,18 +264,14 @@ def interactive_mode() -> int:
             rc = run_preprocessing_interactive()
             if rc != 0:
                 continue
-            rc = run_indexing_interactive()
-            if rc == 0 and ask_yes_no("Continue with retrieval now?", default_yes=True):
+            if ask_yes_no("Continue with retrieval now?", default_yes=True):
                 run_retrieval_interactive()
             continue
         if choice == "7":
-            rc = run_step("crawler", CRAWLER_SCRIPT)
+            rc = run_stage("crawler", run_crawler)
             if rc != 0:
                 continue
             rc = run_preprocessing_interactive()
-            if rc != 0:
-                continue
-            rc = run_indexing_interactive()
             if rc != 0:
                 continue
             if ask_yes_no("Continue with retrieval now?", default_yes=True):

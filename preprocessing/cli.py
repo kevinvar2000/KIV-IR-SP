@@ -45,4 +45,9 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="List detected text keys from input and exit.",
     )
+    parser.add_argument(
+        "--skip-index",
+        action="store_true",
+        help="Do not auto-build index files after preprocessing pipelines finish.",
+    )
     return parser.parse_args()

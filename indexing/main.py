@@ -76,9 +76,21 @@ def documents_fingerprint(documents: dict[str, str]) -> str:
 
 def main() -> int:
     args = parse_args()
+    return run_indexing_stage(
+        pipeline=args.pipeline,
+        input_path=args.input,
+        output_path=args.output,
+    )
 
-    input_path = Path(args.input) if args.input else PREPROCESSED_DIR / f"docs_{args.pipeline}.jsonl"
-    output_path = Path(args.output) if args.output else INDEX_DIR / f"inverted_index_{args.pipeline}.json"
+
+def run_indexing_stage(
+    *,
+    pipeline: str = "baseline",
+    input_path: str | Path | None = None,
+    output_path: str | Path | None = None,
+) -> int:
+    input_path = Path(input_path) if input_path else PREPROCESSED_DIR / f"docs_{pipeline}.jsonl"
+    output_path = Path(output_path) if output_path else INDEX_DIR / f"inverted_index_{pipeline}.json"
 
     documents = load_preprocessed_docs(input_path)
     if not documents:
@@ -90,7 +102,7 @@ def main() -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "meta": {
-            "pipeline": args.pipeline,
+            "pipeline": pipeline,
             "source_file": str(input_path.resolve()),
             "doc_count": len(documents),
             "documents_sha256": documents_fingerprint(documents),

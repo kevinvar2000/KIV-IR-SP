@@ -44,6 +44,11 @@ def parse_args() -> argparse.Namespace:
         help="Output directory for preprocessing artifacts.",
     )
     parser.add_argument(
+        "--skip-index",
+        action="store_true",
+        help="Do not auto-build indexes after preprocessing.",
+    )
+    parser.add_argument(
         "--crawler-background",
         action="store_true",
         help="Run crawler in background (only for stage=crawler).",

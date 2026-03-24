@@ -17,18 +17,27 @@ except ImportError:
     from dataset import write_weighted_vocab, write_jsonl_records
 
 
-def main() -> int:
-    args = parse_args()
+def run_preprocessing_stage(
+    *,
+    input_path: str | Path = DEFAULT_INPUT,
+    output_dir: str | Path,
+    text_key: str | None = None,
+    pipeline_selection: list[str] | None = None,
+    progress_every: int = 1000,
+    no_compat_vocab: bool = False,
+    list_text_keys: bool = False,
+    skip_index: bool = False,
+) -> int:
     run_start = time.perf_counter()
 
-    input_path = Path(args.input)
-    output_dir = Path(args.output_dir)
+    input_path = Path(input_path)
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     records = load_records(input_path)
     available_keys = detect_text_keys(records)
 
-    if args.list_text_keys:
+    if list_text_keys:
         if available_keys:
             print("Detected text-like keys:")
             for key in available_keys:
@@ -37,7 +46,7 @@ def main() -> int:
             print("No text-like keys detected.")
         return 0
 
-    selected_key = args.text_key
+    selected_key = text_key
     if not selected_key:
         if "article_text" in available_keys:
             selected_key = "article_text"
@@ -62,18 +71,20 @@ def main() -> int:
         raise ValueError("No non-empty documents found for selected text key.")
 
     tokenizer = RegexMatchTokenizer()
-    pipelines = build_pipelines()
-    selected_pipeline_names = parse_pipeline_selection(args.pipelines)
+    pipeline_map = build_pipelines()
+    selected_pipeline_names = parse_pipeline_selection(
+        pipeline_selection if pipeline_selection is not None else ["all"]
+    )
     pipeline_results: dict[str, tuple[dict, list[dict]]] = {}
 
     for name in selected_pipeline_names:
         p_start = time.perf_counter()
         vocab, normalized_docs = process_pipeline(
             name,
-            pipelines[name],
+            pipeline_map[name],
             raw_docs,
             tokenizer,
-            progress_every=args.progress_every,
+            progress_every=progress_every,
         )
         pipeline_results[name] = (vocab, normalized_docs)
 
@@ -91,15 +102,41 @@ def main() -> int:
         print(f"[{name}] wrote {docs_out_path}")
         print(f"[{name}] done | terms={len(vocab)} | total={total_elapsed:.1f}s")
 
-    if ("baseline" in selected_pipeline_names) and not args.no_compat_vocab:
+    if ("baseline" in selected_pipeline_names) and not no_compat_vocab:
         compat_path = output_dir / "vocab.txt"
         baseline_vocab, _ = pipeline_results["baseline"]
         with compat_path.open("w", encoding="utf-8") as f:
             write_weighted_vocab(baseline_vocab, f)
         print(f"[baseline_compat] wrote {compat_path}")
 
+    if not skip_index:
+        try:
+            from indexing.main import run_indexing_stage
+        except ImportError:
+            from ..indexing.main import run_indexing_stage
+
+        for pipeline_name in selected_pipeline_names:
+            docs_path = output_dir / f"docs_{pipeline_name}.jsonl"
+            rc = run_indexing_stage(pipeline=pipeline_name, input_path=docs_path)
+            if rc != 0:
+                return rc
+
     print(f"Run finished in {time.perf_counter() - run_start:.1f}s")
     return 0
+
+
+def main() -> int:
+    args = parse_args()
+    return run_preprocessing_stage(
+        input_path=args.input,
+        output_dir=args.output_dir,
+        text_key=args.text_key,
+        pipeline_selection=args.pipelines,
+        progress_every=args.progress_every,
+        no_compat_vocab=args.no_compat_vocab,
+        list_text_keys=args.list_text_keys,
+        skip_index=args.skip_index,
+    )
 
 
 if __name__ == "__main__":

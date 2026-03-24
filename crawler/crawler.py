@@ -272,7 +272,7 @@ def print_progress():
     print(f'Visited URLs: {len(VISITED_URLS)} | Pending URLs: {len(PENDING_URLS)}')
 
 
-if __name__ == '__main__':
+def run_crawler() -> int:
     print('Crawling started...')
     start_time = time.time()
 
@@ -284,3 +284,8 @@ if __name__ == '__main__':
     end_time = time.time()  
     print('Total crawling time: {:.2f} seconds'.format(end_time - start_time))
     print('Crawling finished.')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(run_crawler())

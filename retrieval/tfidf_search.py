@@ -173,7 +173,7 @@ def choose_files_from_data_folder() -> list[Path]:
     return unique_selected
 
 
-def main() -> int:
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run TF-IDF search on one or more collection files.")
     parser.add_argument(
         "files",
@@ -204,13 +204,24 @@ def main() -> int:
         default=10,
         help="Number of top results shown in index-based query mode.",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    if not args.files:
-        index_path = resolve_index_file(args.index_file, args.pipeline)
-        return run_index_query_mode(index_path, args.pipeline, args.query, args.top_k)
 
-    existing_files = resolve_input_files(args.files)
+def run_retrieval_stage(
+    *,
+    files: list[str] | None = None,
+    index_file: str | None = None,
+    pipeline: str = "baseline",
+    query: str | None = None,
+    top_k: int = 10,
+) -> int:
+    files = files or []
+
+    if not files:
+        index_path = resolve_index_file(index_file, pipeline)
+        return run_index_query_mode(index_path, pipeline, query, top_k)
+
+    existing_files = resolve_input_files(files)
 
     if not existing_files:
         print("No input files found for TF-IDF run.")
@@ -223,6 +234,17 @@ def main() -> int:
     for file_path in existing_files:
         run_collection(file_path)
     return 0
+
+
+def main() -> int:
+    args = parse_args()
+    return run_retrieval_stage(
+        files=args.files,
+        index_file=args.index_file,
+        pipeline=args.pipeline,
+        query=args.query,
+        top_k=args.top_k,
+    )
 
 
 if __name__ == "__main__":

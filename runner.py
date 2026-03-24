@@ -1,27 +1,12 @@
 import subprocess
 import sys
-from pathlib import Path
 
-from app_config import CRAWLER_LOG_FILE, ROOT
-
-
-def run_step(name: str, script_path: Path, args: list[str] | None = None) -> int:
-    cmd = [sys.executable, str(script_path)]
-    if args:
-        cmd.extend(args)
-
-    print(f"\n[{name}] running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(ROOT))
-    if result.returncode != 0:
-        print(f"[{name}] failed with exit code {result.returncode}")
-    else:
-        print(f"[{name}] finished")
-    return result.returncode
+from app_config import CRAWLER_LOG_FILE, CRAWLER_SCRIPT, ROOT
 
 
-def run_crawler_background(script_path: Path) -> int:
+def run_crawler_background() -> int:
     CRAWLER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [sys.executable, str(script_path)]
+    cmd = [sys.executable, str(CRAWLER_SCRIPT)]
     creation_flags = 0
     if sys.platform.startswith("win") and hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
         creation_flags |= subprocess.CREATE_NEW_PROCESS_GROUP
