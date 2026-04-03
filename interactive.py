@@ -3,7 +3,6 @@ from pathlib import Path
 import traceback
 
 from app_config import (
-    CRAWLER_DATA_FILE,
     INDEX_DIR,
     PIPELINE_OPTIONS,
     PREPROCESSED_DIR,
@@ -15,6 +14,9 @@ from preprocessing.main import run_preprocessing_stage
 from retrieval.tfidf_search import run_retrieval_stage
 from retrieval.query_interface import run_interactive_query_loop
 from runner import run_crawler_background
+
+
+DIVIDER = "=" * 60
 
 
 def run_stage(name: str, fn) -> int:
@@ -32,10 +34,6 @@ def run_stage(name: str, fn) -> int:
     else:
         print(f"[{name}] finished")
     return exit_code
-
-
-def has_crawler_data() -> bool:
-    return CRAWLER_DATA_FILE.exists() and CRAWLER_DATA_FILE.stat().st_size > 0
 
 
 def safe_load_json_line(line: str) -> dict | None:
@@ -85,80 +83,183 @@ def ask_yes_no(prompt: str, default_yes: bool = True) -> bool:
     return answer in {"y", "yes"}
 
 
+def ask_yes_no_or_nav(prompt: str, default_yes: bool = True) -> bool | str:
+    default_label = "Y/n" if default_yes else "y/N"
+    answer = input(f"{prompt} ({default_label}, back/home): ").strip().lower()
+    if not answer:
+        return default_yes
+    if answer in {"back", "home"}:
+        return answer
+    return answer in {"y", "yes"}
+
+
 def choose_from_list(title: str, options: list[str], default_index: int = 1) -> str:
-    print(f"\n{title}")
-    for idx, option in enumerate(options, start=1):
-        print(f"{idx}. {option}")
+    while True:
+        print(f"\n{title}")
+        print(DIVIDER)
+        for idx, option in enumerate(options, start=1):
+            print(f"{idx}. {option}")
+        print(DIVIDER)
 
-    choice_raw = ask_input("Choose option number", str(default_index))
-    try:
-        idx = int(choice_raw)
-        if 1 <= idx <= len(options):
-            return options[idx - 1]
-    except ValueError:
-        pass
+        choice_raw = ask_input("Choose option number (or back/home)", str(default_index))
+        lowered = choice_raw.lower()
+        if lowered in {"back", "home"}:
+            return lowered
+        try:
+            idx = int(choice_raw)
+            if 1 <= idx <= len(options):
+                return options[idx - 1]
+        except ValueError:
+            pass
 
-    print("Invalid choice, using default.")
-    return options[default_index - 1]
+        print("Invalid choice, please try again.")
 
 
-def choose_pipelines() -> list[str]:
-    print("\nAvailable preprocessing pipelines:")
+def list_preprocessing_source_files() -> list[Path]:
+    crawler_dir = ROOT / "data" / "crawler"
+    if not crawler_dir.exists():
+        return []
+
+    candidates = [
+        path
+        for path in sorted(crawler_dir.iterdir())
+        if path.is_file() and path.suffix.lower() in {".json", ".jsonl"}
+    ]
+    return candidates
+
+
+def choose_preprocessing_input_path() -> Path | None:
+    source_files = list_preprocessing_source_files()
+
+    while True:
+        print("\nChoose source file for preprocessing")
+        for idx, path in enumerate(source_files, start=1):
+            print(f"{idx}. {path.relative_to(ROOT)}")
+        print(f"{len(source_files) + 1}. type custom file path")
+
+        choice = ask_input("Choose (or back/home)", "1" if source_files else str(len(source_files) + 1))
+        lowered = choice.lower()
+        if lowered in {"back", "home"}:
+            return None
+
+        try:
+            idx = int(choice)
+        except ValueError:
+            idx = -1
+
+        if 1 <= idx <= len(source_files):
+            return source_files[idx - 1]
+
+        if idx == len(source_files) + 1 or not source_files:
+            while True:
+                raw_path = ask_input("Enter file path to preprocess")
+                lowered_path = raw_path.lower()
+                if lowered_path in {"back", "home"}:
+                    return None
+
+                candidate = Path(raw_path)
+                if candidate.exists() and candidate.is_file():
+                    return candidate
+
+                print(f"File not found: {candidate}")
+
+        print("Invalid choice, please try again.")
+
+
+def choose_language() -> str | None:
+    selected = choose_from_list(
+        "Choose document language",
+        ["czech (cs)", "slovak (sk)", "english (en)"],
+        1,
+    )
+    if selected in {"back", "home"}:
+        return None
+    return {"czech (cs)": "cs", "slovak (sk)": "sk", "english (en)": "en"}[selected]
+
+
+def choose_pipelines(language: str) -> list[str]:
+    print(f"\nAvailable preprocessing pipelines for {language}:")
     print("1. baseline (lowercase, remove punct/tags/URLs, remove stopwords, min-length 2)")
-    print("2. stemming (baseline + Czech stemming)")
-    print("3. lemmatization (baseline + Czech lemmatization)")
+    print("2. stemming (baseline + language-aware stemming/lemmatization)")
+    print("3. lemmatization (baseline + language-aware lemmatization)")
     print("4. stemming_no_diacritics (baseline + stemming + remove accents)")
     print("5. lemmatization_no_diacritics (baseline + lemmatization + remove accents)")
     print(f"{len(PIPELINE_OPTIONS) + 1}. all (runs all pipelines)")
-    print("\nNote: All pipelines use the baseline steps. Options 2-5 add additional processing on top.")
+    print("\nNote: Stopwords, stemming, and lemmatization follow the selected language.")
 
-    raw = ask_input("Choose one or more numbers (comma-separated)", str(len(PIPELINE_OPTIONS) + 1))
-    parts = [part.strip() for part in raw.split(",") if part.strip()]
+    while True:
+        raw = ask_input("Choose one or more numbers (comma-separated)", str(len(PIPELINE_OPTIONS) + 1))
+        if raw.lower() in {"back", "home"}:
+            return [raw.lower()]
+        parts = [part.strip() for part in raw.split(",") if part.strip()]
 
-    if not parts:
-        return ["all"]
-
-    chosen: list[str] = []
-    for part in parts:
-        try:
-            idx = int(part)
-        except ValueError:
-            continue
-        if idx == len(PIPELINE_OPTIONS) + 1:
+        if not parts:
             return ["all"]
-        if 1 <= idx <= len(PIPELINE_OPTIONS):
-            name = PIPELINE_OPTIONS[idx - 1]
-            if name not in chosen:
-                chosen.append(name)
 
-    return chosen or ["all"]
+        chosen: list[str] = []
+        for part in parts:
+            try:
+                idx = int(part)
+            except ValueError:
+                continue
+            if idx == len(PIPELINE_OPTIONS) + 1:
+                return ["all"]
+            if 1 <= idx <= len(PIPELINE_OPTIONS):
+                name = PIPELINE_OPTIONS[idx - 1]
+                if name not in chosen:
+                    chosen.append(name)
+
+        if chosen:
+            return chosen
+
+        print("Invalid choice, please try again.")
 
 
 def run_preprocessing_interactive() -> int:
-    if not has_crawler_data():
-        print(f"No crawler data found at: {CRAWLER_DATA_FILE}")
-        print("Run crawler first.")
-        return 1
+    input_path = choose_preprocessing_input_path()
+    if input_path is None:
+        return 0
 
-    text_keys = detect_text_keys(CRAWLER_DATA_FILE)
+    language = choose_language()
+    if language is None:
+        return 0
+
+    text_keys = detect_text_keys(input_path)
     if not text_keys:
-        print("Could not detect text keys from crawler data.")
+        print(f"Could not detect text keys from input file: {input_path}")
         text_key = ask_input("Enter text key manually", "article_text")
+        if text_key.lower() in {"back", "home"}:
+            return 0
     else:
         default_key = "article_text" if "article_text" in text_keys else text_keys[0]
         text_key = choose_from_list("Detected text keys", text_keys, text_keys.index(default_key) + 1)
+        if text_key in {"back", "home"}:
+            return 0
 
-    pipelines = choose_pipelines()
+    pipelines = choose_pipelines(language)
+    if pipelines == ["back"] or pipelines == ["home"]:
+        return 0
 
     return run_stage(
         "preprocessing",
         lambda: run_preprocessing_stage(
-            input_path=CRAWLER_DATA_FILE,
+            input_path=input_path,
             output_dir=PREPROCESSED_DIR,
             text_key=text_key,
             pipeline_selection=pipelines,
+            language=language,
         ),
     )
+
+
+def run_crawler_interactive() -> int:
+    choice = ask_yes_no_or_nav("Run crawler in background?", default_yes=False)
+    if choice in {"back", "home"}:
+        return 0
+    if choice:
+        run_crawler_background()
+        return 0
+    return run_stage("crawler", run_crawler)
 
 
 def list_index_files() -> list[Path]:
@@ -167,15 +268,67 @@ def list_index_files() -> list[Path]:
     return sorted(path for path in INDEX_DIR.glob("inverted_index_*.json") if path.is_file())
 
 
+def list_preprocessed_docs_files() -> list[Path]:
+    if not PREPROCESSED_DIR.exists():
+        return []
+    return sorted(path for path in PREPROCESSED_DIR.glob("docs_*.jsonl") if path.is_file())
+
+
+def choose_preprocessed_docs_file() -> Path | None:
+    docs_files = list_preprocessed_docs_files()
+
+    while True:
+        print("\nChoose preprocessed docs file")
+        for idx, path in enumerate(docs_files, start=1):
+            print(f"{idx}. {path.relative_to(ROOT)}")
+        print(f"{len(docs_files) + 1}. type custom file path")
+
+        choice = ask_input("Choose (or back/home)", "1" if docs_files else str(len(docs_files) + 1))
+        lowered = choice.lower()
+        if lowered in {"back", "home"}:
+            return None
+
+        try:
+            idx = int(choice)
+        except ValueError:
+            idx = -1
+
+        if 1 <= idx <= len(docs_files):
+            return docs_files[idx - 1]
+
+        if idx == len(docs_files) + 1 or not docs_files:
+            while True:
+                raw_path = ask_input("Enter preprocessed docs file path")
+                lowered_path = raw_path.lower()
+                if lowered_path in {"back", "home"}:
+                    return None
+
+                candidate = Path(raw_path)
+                if candidate.exists() and candidate.is_file():
+                    return candidate
+
+                print(f"File not found: {candidate}")
+
+        print("Invalid choice, please try again.")
+
+
 def run_indexing_interactive() -> int:
-    pipeline_name = choose_from_list("Choose pipeline for indexing", PIPELINE_OPTIONS, 1)
-    input_default = PREPROCESSED_DIR / f"docs_{pipeline_name}.jsonl"
+    print("\nIndexing expects a preprocessed docs_<pipeline>.jsonl file.")
+    print("Use this only after preprocessing has already produced normalized documents.")
+    input_path = choose_preprocessed_docs_file()
+    if input_path is None:
+        return 0
+
+    pipeline_name = input_path.stem.removeprefix("docs_")
+    if not pipeline_name:
+        pipeline_name = "baseline"
+
     output_default = INDEX_DIR / f"inverted_index_{pipeline_name}.json"
     return run_stage(
         "indexing",
         lambda: run_indexing_stage(
             pipeline=pipeline_name,
-            input_path=input_default,
+            input_path=input_path,
             output_path=output_default,
         ),
     )
@@ -184,13 +337,12 @@ def run_indexing_interactive() -> int:
 def run_retrieval_interactive() -> int:
     index_files = list_index_files()
 
-    if index_files:
-        print("\nFound index files in data/index:")
-        for idx, path in enumerate(index_files, start=1):
-            print(f"{idx}. {path.relative_to(ROOT)}")
-    else:
+    if not index_files:
         print("\nNo index files found under data/index.")
-        if ask_yes_no("Build an index now?", default_yes=True):
+        build_now = ask_yes_no_or_nav("Build an index now?", default_yes=True)
+        if build_now in {"back", "home"}:
+            return 0
+        if build_now:
             rc = run_indexing_interactive()
             if rc != 0:
                 return rc
@@ -208,74 +360,42 @@ def run_retrieval_interactive() -> int:
                 break
 
     selected = choose_from_list("Choose index file", [str(p.relative_to(ROOT)) for p in index_files], default_idx)
+    if selected in {"back", "home"}:
+        return 0
     selected_path = ROOT / selected
+    pipeline_name = selected_path.stem.removeprefix("inverted_index_") or "baseline"
 
-    # Use the new interactive query loop
-    return run_interactive_query_loop(str(selected_path), pipeline="baseline")
+    return run_interactive_query_loop(str(selected_path), pipeline=pipeline_name)
 
 
 def interactive_mode() -> int:
     print("Interactive pipeline mode")
 
-    if not has_crawler_data():
-        print(f"No crawler data found at: {CRAWLER_DATA_FILE}")
-        if ask_yes_no("Run crawler first now?", default_yes=True):
-            if ask_yes_no("Run crawler in background?", default_yes=False):
-                run_crawler_background()
-                return 0
-            rc = run_stage("crawler", run_crawler)
-            if rc != 0:
-                return rc
-        else:
-            print("Nothing to do without data. Exiting.")
-            return 0
-
     while True:
         print("\nWhat do you want to run?")
-        print("1. crawler (foreground)")
-        print("2. crawler (background)")
-        print("3. preprocessing (auto-index)")
-        print("4. indexing")
-        print("5. retrieval")
-        print("6. preprocessing -> retrieval")
-        print("7. all (crawler -> preprocessing -> retrieval)")
+        print(DIVIDER)
+        print("1. crawler")
+        print("2. preprocessing + indexing")
+        print("3. indexing preprocessed docs")
+        print("4. retrieval")
         print("0. exit")
+        print(DIVIDER)
 
-        choice = ask_input("Choose", "3")
+        choice = ask_input("Choose", "2")
 
         if choice == "0":
             return 0
         if choice == "1":
-            run_stage("crawler", run_crawler)
+            run_crawler_interactive()
             continue
         if choice == "2":
-            run_crawler_background()
-            continue
-        if choice == "3":
             run_preprocessing_interactive()
             continue
-        if choice == "4":
+        if choice == "3":
             run_indexing_interactive()
             continue
-        if choice == "5":
+        if choice == "4":
             run_retrieval_interactive()
-            continue
-        if choice == "6":
-            rc = run_preprocessing_interactive()
-            if rc != 0:
-                continue
-            if ask_yes_no("Continue with retrieval now?", default_yes=True):
-                run_retrieval_interactive()
-            continue
-        if choice == "7":
-            rc = run_stage("crawler", run_crawler)
-            if rc != 0:
-                continue
-            rc = run_preprocessing_interactive()
-            if rc != 0:
-                continue
-            if ask_yes_no("Continue with retrieval now?", default_yes=True):
-                run_retrieval_interactive()
             continue
 
         print("Invalid menu option.")

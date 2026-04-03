@@ -3,14 +3,14 @@ from pathlib import Path
 
 try:
     from .cli import parse_args
-    from .config import DEFAULT_INPUT, build_pipelines
+    from .config import DEFAULT_INPUT, build_pipelines, normalize_language_code
     from .dataset import load_records, detect_text_keys, normalize_docs
     from .orchestration import parse_pipeline_selection, process_pipeline
     from .tokenizer import RegexMatchTokenizer
     from .dataset import write_weighted_vocab, write_jsonl_records
 except ImportError:
     from cli import parse_args
-    from config import DEFAULT_INPUT, build_pipelines
+    from config import DEFAULT_INPUT, build_pipelines, normalize_language_code
     from dataset import load_records, detect_text_keys, normalize_docs
     from orchestration import parse_pipeline_selection, process_pipeline
     from tokenizer import RegexMatchTokenizer
@@ -23,6 +23,7 @@ def run_preprocessing_stage(
     output_dir: str | Path,
     text_key: str | None = None,
     pipeline_selection: list[str] | None = None,
+    language: str = "cs",
     progress_every: int = 1000,
     no_compat_vocab: bool = False,
     list_text_keys: bool = False,
@@ -33,6 +34,8 @@ def run_preprocessing_stage(
     input_path = Path(input_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    normalized_language = normalize_language_code(language)
+    artifact_suffix = "" if normalized_language == "cs" else f"_{normalized_language}"
 
     records = load_records(input_path)
     available_keys = detect_text_keys(records)
@@ -71,7 +74,7 @@ def run_preprocessing_stage(
         raise ValueError("No non-empty documents found for selected text key.")
 
     tokenizer = RegexMatchTokenizer()
-    pipeline_map = build_pipelines()
+    pipeline_map = build_pipelines(normalized_language)
     selected_pipeline_names = parse_pipeline_selection(
         pipeline_selection if pipeline_selection is not None else ["all"]
     )
@@ -88,12 +91,12 @@ def run_preprocessing_stage(
         )
         pipeline_results[name] = (vocab, normalized_docs)
 
-        out_path = output_dir / f"vocab_{name}.txt"
+        out_path = output_dir / f"vocab_{name}{artifact_suffix}.txt"
         write_start = time.perf_counter()
         with out_path.open("w", encoding="utf-8") as f:
             write_weighted_vocab(vocab, f)
 
-        docs_out_path = output_dir / f"docs_{name}.jsonl"
+        docs_out_path = output_dir / f"docs_{name}{artifact_suffix}.jsonl"
         write_jsonl_records(normalized_docs, docs_out_path)
 
         write_elapsed = time.perf_counter() - write_start
@@ -102,7 +105,7 @@ def run_preprocessing_stage(
         print(f"[{name}] wrote {docs_out_path}")
         print(f"[{name}] done | terms={len(vocab)} | total={total_elapsed:.1f}s")
 
-    if ("baseline" in selected_pipeline_names) and not no_compat_vocab:
+    if ("baseline" in selected_pipeline_names) and not no_compat_vocab and normalized_language == "cs":
         compat_path = output_dir / "vocab.txt"
         baseline_vocab, _ = pipeline_results["baseline"]
         with compat_path.open("w", encoding="utf-8") as f:
@@ -116,8 +119,14 @@ def run_preprocessing_stage(
             from ..indexing.main import run_indexing_stage
 
         for pipeline_name in selected_pipeline_names:
-            docs_path = output_dir / f"docs_{pipeline_name}.jsonl"
-            rc = run_indexing_stage(pipeline=pipeline_name, input_path=docs_path)
+            pipeline_with_language = f"{pipeline_name}{artifact_suffix}"
+            docs_path = output_dir / f"docs_{pipeline_with_language}.jsonl"
+            index_output = output_dir.parent / "index" / f"inverted_index_{pipeline_with_language}.json"
+            rc = run_indexing_stage(
+                pipeline=pipeline_with_language,
+                input_path=docs_path,
+                output_path=index_output,
+            )
             if rc != 0:
                 return rc
 
@@ -132,6 +141,7 @@ def main() -> int:
         output_dir=args.output_dir,
         text_key=args.text_key,
         pipeline_selection=args.pipelines,
+        language=args.language,
         progress_every=args.progress_every,
         no_compat_vocab=args.no_compat_vocab,
         list_text_keys=args.list_text_keys,

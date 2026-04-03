@@ -30,6 +30,11 @@ def parse_args() -> argparse.Namespace:
         help="Directory where vocab files will be written.",
     )
     parser.add_argument(
+        "--language",
+        default="cs",
+        help="Document language for preprocessing. Allowed: cs/czech, sk/slovak, en/english.",
+    )
+    parser.add_argument(
         "--progress-every",
         type=int,
         default=1000,

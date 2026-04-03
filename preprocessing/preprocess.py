@@ -48,6 +48,66 @@ CZECH_STOPWORDS: set[str] = {
     "zde", "ze", "že", "zpět", "zpráva", "zprávy",
 }
 
+SLOVAK_STOPWORDS: set[str] = {
+    "a", "aby", "aj", "ak", "ako", "ale", "ani", "áno", "asi", "aspoň",
+    "bez", "bol", "bola", "boli", "bolo", "by", "byť", "cez", "čo", "dakedy",
+    "dnes", "do", "dobre", "dosť", "ho", "hodne", "i", "ja", "jak", "je",
+    "jeho", "jej", "jemu", "len", "ma", "majú", "máme", "málo", "mezi", "mi",
+    "mňa", "mnou", "moj", "môj", "môže", "my", "na", "nad", "nám", "náš",
+    "ne", "nebol", "nebola", "neboli", "nebolo", "nič", "nielen", "od", "o", "on",
+    "ona", "oni", "ono", "po", "pod", "podľa", "pokiaľ", "potom", "pre", "pred",
+    "pri", "sa", "si", "sme", "som", "ste", "ta", "tak", "takže", "tam", "teda",
+    "ten", "tento", "to", "tom", "tomu", "tu", "tvoj", "ty", "u", "v", "vo",
+    "vy", "z", "za", "že",
+}
+
+ENGLISH_STOPWORDS: set[str] = {
+    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
+    "any", "are", "as", "at", "be", "because", "been", "before", "being", "below",
+    "between", "both", "but", "by", "can", "did", "do", "does", "doing", "down",
+    "during", "each", "few", "for", "from", "further", "had", "has", "have", "having",
+    "he", "her", "here", "hers", "herself", "him", "himself", "his", "how", "i",
+    "if", "in", "into", "is", "it", "its", "itself", "just", "me", "more", "most",
+    "my", "myself", "no", "nor", "not", "of", "off", "on", "once", "only", "or",
+    "other", "our", "ours", "ourselves", "out", "over", "own", "same", "she", "should",
+    "so", "some", "such", "than", "that", "the", "their", "theirs", "them", "themselves",
+    "then", "there", "these", "they", "this", "those", "through", "to", "too", "under",
+    "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", "while",
+    "who", "whom", "why", "with", "you", "your", "yours", "yourself", "yourselves",
+}
+
+SUPPORTED_LANGUAGE_CODES: set[str] = {"cs", "sk", "en"}
+LANGUAGE_ALIASES: dict[str, str] = {
+    "czech": "cs",
+    "czech language": "cs",
+    "slovak": "sk",
+    "slovak language": "sk",
+    "english": "en",
+    "english language": "en",
+}
+LANGUAGE_STOPWORDS: dict[str, set[str]] = {
+    "cs": CZECH_STOPWORDS,
+    "sk": SLOVAK_STOPWORDS,
+    "en": ENGLISH_STOPWORDS,
+}
+
+
+def normalize_language_code(language: str | None) -> str:
+    if not language:
+        return "cs"
+
+    normalized = language.strip().lower()
+    normalized = LANGUAGE_ALIASES.get(normalized, normalized)
+    if normalized not in SUPPORTED_LANGUAGE_CODES:
+        raise ValueError(
+            f"Unsupported language '{language}'. Use one of: cs, sk, en."
+        )
+    return normalized
+
+
+def get_stopwords(language: str | None = None) -> set[str]:
+    return set(LANGUAGE_STOPWORDS[normalize_language_code(language)])
+
 
 class TokenPreprocessor(ABC):
     @abstractmethod
@@ -106,10 +166,10 @@ class MinLengthPreprocessor(TokenPreprocessor):
 
 
 class StopwordPreprocessor(TokenPreprocessor):
-    """Removes Czech stopwords from the token stream."""
+    """Removes stopwords for the selected language from the token stream."""
 
-    def __init__(self, stopwords: set[str] = None):
-        self._stopwords = stopwords or CZECH_STOPWORDS
+    def __init__(self, stopwords: set[str] | None = None, language: str = "cs"):
+        self._stopwords = stopwords or get_stopwords(language)
 
     def preprocess(self, token: Token, document: str) -> Token | None:
         if token.processed_form in self._stopwords:
@@ -121,10 +181,10 @@ class StopwordPreprocessor(TokenPreprocessor):
 
 
 class StemmingPreprocessor(TokenPreprocessor):
-    """Stemming for Czech tokens using an internal suffix-based stemmer."""
+    """Stemming for Czech tokens with language-aware fallback lemmatization."""
 
     def __init__(self, language: str = "cs"):
-        self.lang = language
+        self.lang = normalize_language_code(language)
 
     def _fallback_stem_cs(self, word: str) -> str:
         # Light-weight Czech suffix stripper.
@@ -149,16 +209,15 @@ class StemmingPreprocessor(TokenPreprocessor):
             if self.lang == "cs":
                 token.processed_form = self._fallback_stem_cs(token.processed_form)
             else:
-                # Fallback for non-Czech languages where no stemmer is configured.
                 token.processed_form = simplemma.lemmatize(token.processed_form, lang=self.lang, greedy=True)
         return token
 
 
 class LemmatizationPreprocessor(TokenPreprocessor):
-    """Lemmatization using simplemma (works for Czech and 50+ languages)."""
+    """Lemmatization using simplemma for Czech, Slovak, and English."""
 
     def __init__(self, language: str = "cs"):
-        self.lang = language
+        self.lang = normalize_language_code(language)
 
     def preprocess(self, token: Token, document: str) -> Token:
         if token.token_type == TokenType.WORD:

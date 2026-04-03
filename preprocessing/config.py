@@ -11,6 +11,7 @@ try:
         RemoveTokenTypesPreprocessor,
         StemmingPreprocessor,
         StopwordPreprocessor,
+        normalize_language_code,
     )
 except ImportError:
     from tokenizer import TokenType
@@ -23,6 +24,7 @@ except ImportError:
         RemoveTokenTypesPreprocessor,
         StemmingPreprocessor,
         StopwordPreprocessor,
+        normalize_language_code,
     )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,34 +39,31 @@ PIPELINE_NAMES = [
     "lemmatization_no_diacritics",
 ]
 
-# Shared base steps used by every pipeline
-# These steps are applied to ALL pipelines:
-# 1. Lowercase: convert text to lowercase
-# 2. RemoveTokenTypes: remove punctuation, HTML tags, and URLs
-# 3. StopwordPreprocessor: remove common Czech stopwords
-# 4. MinLengthPreprocessor: keep only terms with 2+ characters
-# Other pipelines (stemming, lemmatization, etc.) add additional processing on top of these.
-BASE_STEPS = [
-    LowercasePreprocessor(),
-    RemoveTokenTypesPreprocessor({TokenType.PUNCT, TokenType.TAG, TokenType.URL}),
-    StopwordPreprocessor(),
-    MinLengthPreprocessor(min_length=2),
-]
+def build_base_steps(language: str = "cs") -> list:
+    normalized_language = normalize_language_code(language)
+    return [
+        LowercasePreprocessor(),
+        RemoveTokenTypesPreprocessor({TokenType.PUNCT, TokenType.TAG, TokenType.URL}),
+        StopwordPreprocessor(language=normalized_language),
+        MinLengthPreprocessor(min_length=2),
+    ]
 
 
-def build_pipelines() -> dict[str, PreprocessingPipeline]:
+def build_pipelines(language: str = "cs") -> dict[str, PreprocessingPipeline]:
+    normalized_language = normalize_language_code(language)
+    base_steps = build_base_steps(normalized_language)
     return {
-        "baseline": PreprocessingPipeline([*BASE_STEPS]),
-        "stemming": PreprocessingPipeline([*BASE_STEPS, StemmingPreprocessor()]),
-        "lemmatization": PreprocessingPipeline([*BASE_STEPS, LemmatizationPreprocessor()]),
+        "baseline": PreprocessingPipeline([*base_steps]),
+        "stemming": PreprocessingPipeline([*base_steps, StemmingPreprocessor(normalized_language)]),
+        "lemmatization": PreprocessingPipeline([*base_steps, LemmatizationPreprocessor(normalized_language)]),
         "stemming_no_diacritics": PreprocessingPipeline([
-            *BASE_STEPS,
-            StemmingPreprocessor(),
+            *base_steps,
+            StemmingPreprocessor(normalized_language),
             RemoveDiacriticsPreprocessor(),
         ]),
         "lemmatization_no_diacritics": PreprocessingPipeline([
-            *BASE_STEPS,
-            LemmatizationPreprocessor(),
+            *base_steps,
+            LemmatizationPreprocessor(normalized_language),
             RemoveDiacriticsPreprocessor(),
         ]),
     }
