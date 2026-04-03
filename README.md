@@ -4,7 +4,8 @@ A modular Python project for:
 - crawling web pages,
 - preprocessing text with multiple pipelines,
 - building persisted inverted indexes,
-- running TF-IDF or Boolean retrieval.
+- running TF-IDF or Boolean retrieval,
+- exporting batch evaluation runs in TREC format.
 
 The project now runs primarily through one interactive entry point.
 
@@ -26,7 +27,8 @@ This opens an interactive menu where you can:
 1. run crawler (foreground or background),
 2. run preprocessing + indexing,
 3. run indexing from existing preprocessed docs,
-4. run retrieval.
+4. run retrieval,
+5. export an evaluation run.
 
 ## Current Workflow
 
@@ -63,6 +65,22 @@ Interactive retrieval lets you choose a persisted index and then a method:
 - Boolean (`AND`, `OR`, `NOT`)
 
 Boolean mode now uses the real indexed term space (from persisted index postings), not placeholder text.
+
+### 5. Evaluation Export
+
+Evaluation mode writes a TREC-style run file from documents and queries JSON/JSONL inputs.
+
+You can run it interactively or with:
+
+```bash
+python -m evaluation.trec_eval --documents path/to/documents.json --queries path/to/queries.json --output results.txt --model tfidf
+```
+
+The exporter writes lines in the required 6-column format:
+
+```text
+qid 0 doc_id rank score run_id
+```
 
 ## Query Preprocessing Consistency
 
@@ -105,6 +123,8 @@ This applies to both TF-IDF and Boolean query paths.
 │   ├── reporting.py
 │   ├── scoring.py
 │   └── boolean_search.py
+├── evaluation/
+│   └── trec_eval.py
 └── data/
     ├── crawler/
     ├── preprocessed/

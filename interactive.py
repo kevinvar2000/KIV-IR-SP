@@ -9,6 +9,7 @@ from app_config import (
     ROOT,
 )
 from crawler.crawler import run_crawler
+from evaluation.trec_eval import run_trec_evaluation
 from indexing.main import run_indexing_stage
 from preprocessing.main import run_preprocessing_stage
 from retrieval.query_interface import run_interactive_query_loop
@@ -367,6 +368,82 @@ def run_retrieval_interactive() -> int:
     return run_interactive_query_loop(str(selected_path), pipeline=pipeline_name)
 
 
+def run_evaluation_interactive() -> int:
+    print("\nEvaluation exports TREC run files from documents and queries JSON/JSONL files.")
+
+    while True:
+        documents_path = ask_input("Enter documents file path (back/home to cancel)")
+        if documents_path.lower() in {"back", "home"}:
+            return 0
+        documents_file = Path(documents_path)
+        if documents_file.exists() and documents_file.is_file():
+            break
+        print(f"File not found: {documents_file}")
+
+    while True:
+        queries_path = ask_input("Enter queries file path (back/home to cancel)")
+        if queries_path.lower() in {"back", "home"}:
+            return 0
+        queries_file = Path(queries_path)
+        if queries_file.exists() and queries_file.is_file():
+            break
+        print(f"File not found: {queries_file}")
+
+    language = choose_language()
+    if language is None:
+        return 0
+
+    pipeline_choice = choose_from_list(
+        "Choose preprocessing pipeline",
+        list(PIPELINE_OPTIONS),
+        1,
+    )
+    if pipeline_choice in {"back", "home"}:
+        return 0
+
+    model_choice = choose_from_list("Choose retrieval model", ["tf-idf", "boolean"], 1)
+    if model_choice in {"back", "home"}:
+        return 0
+
+    top_k_raw = ask_input("Results per query", "1000")
+    if top_k_raw.lower() in {"back", "home"}:
+        return 0
+    try:
+        top_k = int(top_k_raw)
+    except ValueError:
+        print("Invalid number, using 1000.")
+        top_k = 1000
+
+    default_output = ROOT / "data" / "evaluation" / "results.txt"
+    output_raw = ask_input("Output TREC file path", str(default_output))
+    if output_raw.lower() in {"back", "home"}:
+        return 0
+    output_path = Path(output_raw)
+
+    run_id = ask_input("Run id", "run")
+    if run_id.lower() in {"back", "home"}:
+        return 0
+
+    qrels_path = ask_input("Optional qrels file path (empty to skip)", "")
+    if qrels_path.lower() in {"back", "home"}:
+        return 0
+
+    return run_stage(
+        "evaluation",
+        lambda: run_trec_evaluation(
+            documents_path=documents_file,
+            queries_path=queries_file,
+            output_path=output_path,
+            pipeline=pipeline_choice,
+            language=language,
+            model="tfidf" if model_choice == "tf-idf" else "boolean",
+            top_k=top_k,
+            run_id=run_id,
+            qrels_path=qrels_path or None,
+        ),
+    )
+
+
 def interactive_mode() -> int:
     print("Interactive pipeline mode")
 
@@ -377,6 +454,7 @@ def interactive_mode() -> int:
         print("2. preprocessing + indexing")
         print("3. indexing preprocessed docs")
         print("4. retrieval")
+        print("5. evaluation export")
         print("0. exit")
         print(DIVIDER)
 
@@ -395,6 +473,9 @@ def interactive_mode() -> int:
             continue
         if choice == "4":
             run_retrieval_interactive()
+            continue
+        if choice == "5":
+            run_evaluation_interactive()
             continue
 
         print("Invalid menu option.")
