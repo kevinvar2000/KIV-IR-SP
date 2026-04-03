@@ -271,17 +271,11 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     if metadata:
         print(f"  Metadata: {len(metadata)} documents loaded")
     
-    # Ask which search method
-    search_method = _ask_search_method()
-    
     # Create preprocessors
     query_preprocessor = PipelineQueryPreprocessor(resolved_pipeline)
-    
-    if search_method == "boolean":
-        boolean_index = _build_boolean_index_from_tfidf_docs(tfidf_index)
-        boolean_scorer = BooleanScorer(boolean_index, query_preprocessor)
-    else:
-        tfidf_scorer = CosineScorer(tfidf_index, query_preprocessor)
+    boolean_index = _build_boolean_index_from_tfidf_docs(tfidf_index)
+    boolean_scorer = BooleanScorer(boolean_index, query_preprocessor, debug=False)
+    tfidf_scorer = CosineScorer(tfidf_index, query_preprocessor)
     
     # Query loop
     print("\n" + "=" * 60)
@@ -301,14 +295,20 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
                 print("\nGoodbye!")
                 return 0
             
+            search_method = _ask_search_method()
             print(f"\nSearching for: '{query}'")
             
             if search_method == "tfidf":
                 ranked = tfidf_scorer.search(query)
-                print(f"\nResults ({len(ranked)} found):")
+                print(f"\nTotal documents found: {len(ranked)}")
+                print(f"Results ({len(ranked)} found):")
             else:  # boolean
                 ranked = boolean_scorer.search(query)
-                print(f"\nResults ({len(ranked)} found):")
+                debug_data = boolean_scorer.last_debug
+                print(f"\nTotal documents found: {len(ranked)}")
+                print(f"Results ({len(ranked)} found):")
+                print(f"[debug][boolean] infix={debug_data.get('infix_tokens', [])}")
+                print(f"[debug][boolean] postfix={debug_data.get('postfix_tokens', [])}")
             
             print(_format_results(ranked, search_method, metadata, max_display=10))
             _print_debug_hits(
