@@ -1,403 +1,146 @@
 # Information Retrieval Pipeline
 
-A modular Python pipeline for web crawling, text preprocessing, and TF-IDF based information retrieval.
+A modular Python project for:
+- crawling web pages,
+- preprocessing text with multiple pipelines,
+- building persisted inverted indexes,
+- running TF-IDF or Boolean retrieval.
 
-## Project Structure
-
-```
-.
-├── main.py                 # Unified CLI entry point
-├── .gitignore             # Ignore cache and generated data
-├── README.md              # This file
-│
-├── crawler/
-│   ├── crawler.py         # Web crawler with state persistence
-│   └── README.md
-│
-├── preprocessing/
-│   ├── main.py            # CLI entry point
-│   ├── cli.py             # Argument parsing
-│   ├── config.py          # Pipeline definitions & constants
-│   ├── dataset.py         # I/O, document handling, text key detection
-│   ├── orchestration.py   # Pipeline execution & vocabulary building
-│   ├── preprocess.py      # Preprocessing filters (stopwords, stemming, etc.)
-│   ├── tokenizer.py       # Tokenization & token classification
-│   └── README.md
-│
-├── indexing/
-│   ├── __init__.py
-│   └── main.py            # Builds persisted inverted index from preprocessed docs
-│
-├── retrieval/
-│   ├── __init__.py        # Package marker
-│   ├── dataset.py         # Shared collection parsing & tokenization
-│   ├── reporting.py       # Shared ASCII table rendering helpers
-│   ├── tfidf.py           # TF-IDF index/scorer implementation
-│   ├── scoring.py         # Backward-compatible TF-IDF exports
-│   ├── workflow.py        # TF-IDF workflow orchestration
-│   ├── tfidf_search.py    # TF-IDF search entry point
-│   ├── boolean.py         # Boolean index/scorer implementation
-│   ├── boolean_search.py  # Boolean search entry point
-│   ├── test1.txt          # Example collection
-│   ├── test2.txt          # Example collection
-│   └── README.md
-│
-├── data/
-│   ├── crawler/
-│   │   ├── crawled_pages.json
-│   │   └── crawler_state.json
-│   └── preprocessed/
-│       ├── vocab_baseline.txt
-│       ├── docs_baseline.jsonl
-│       ├── vocab_stemming.txt
-│       └── ...
-│   └── index/
-│       └── inverted_index_baseline.json
-│
-└── app_config.py          # Root-level pipeline config
-```
+The project now runs primarily through one interactive entry point.
 
 ## Quick Start
 
-### Installation
-
-No external setup required beyond Python 3.10+ and pip dependencies:
+Install dependencies:
 
 ```bash
 pip install beautifulsoup4 requests simplemma
 ```
 
-### 1. Crawl the Web
-
-Start the web crawler:
+Run the app:
 
 ```bash
-python crawler/crawler.py
+python main.py
 ```
 
-Or use through main dispatcher:
+This opens an interactive menu where you can:
+1. run crawler (foreground or background),
+2. run preprocessing + indexing,
+3. run indexing from existing preprocessed docs,
+4. run retrieval.
 
-```bash
-python main.py crawler
-```
+## Current Workflow
 
-**Options:**
-- The crawler loads state from `data/crawler/crawler_state.json` if it exists
-- First run fetches `robots.txt` and sitemap
-- Pages are saved to `data/crawler/crawled_pages.json` (JSONL format)
-- Configurable: `REQUEST_DELAY`, `MAX_URLS`, `DISALLOWED_PATHS` in `crawler/crawler.py`
+### 1. Crawler
 
-### 2. Preprocess Text
+- Crawls site content and stores JSONL output in `data/crawler/crawled_pages.json`.
+- Background mode writes logs to `data/crawler/crawler.log`.
 
-Run preprocessing pipelines interactively:
+### 2. Preprocessing + Indexing
 
-```bash
-python preprocessing/main.py
-```
+In interactive mode, preprocessing now:
+- lets you select input source file from `data/crawler` or type a custom path,
+- lets you choose document language (`cs`, `sk`, `en`),
+- lets you choose one or more pipelines,
+- automatically builds matching index files after preprocessing.
 
-Or specify options:
+Generated outputs:
+- docs: `data/preprocessed/docs_<pipeline>[ _<lang> ].jsonl`
+- vocab: `data/preprocessed/vocab_<pipeline>[ _<lang> ].txt`
+- index: `data/index/inverted_index_<pipeline>[ _<lang> ].json`
 
-```bash
-python preprocessing/main.py \
-  --input data/crawler/crawled_pages.json \
-  --text-key article_text \
-  --pipelines baseline stemming lemmatization \
-  --output-dir data/preprocessed
-```
+Notes:
+- Czech (`cs`) remains default.
+- For Czech baseline, compatibility `data/preprocessed/vocab.txt` is still produced.
 
-**Available pipelines:**
-- `baseline` — lowercase, remove punctuation/stopwords, min length 2
-- `stemming` — + Czech stemming
-- `lemmatization` — + Czech lemmatization (via simplemma)
-- `stemming_no_diacritics` — + remove accents
-- `lemmatization_no_diacritics` — + remove accents
+### 3. Indexing Only
 
-**Detect available text keys from data:**
+Indexing-only mode expects already preprocessed docs (`docs_*.jsonl`).
 
-```bash
-python preprocessing/main.py --list-text-keys
-```
+### 4. Retrieval
 
-**Output:**
-- Vocabulary files: `data/preprocessed/vocab_<pipeline>.txt` (term frequency sorted)
-- Compatibility vocab: `data/preprocessed/vocab.txt` (baseline)
-- Normalized docs per pipeline: `data/preprocessed/docs_<pipeline>.jsonl`
+Interactive retrieval lets you choose a persisted index and then a method:
+- TF-IDF (ranked results with scores)
+- Boolean (`AND`, `OR`, `NOT`)
 
-### 3. Indexing
+Boolean mode now uses the real indexed term space (from persisted index postings), not placeholder text.
 
-Build an inverted index from normalized preprocessed docs:
+## Query Preprocessing Consistency
 
-```bash
-python indexing/main.py --pipeline baseline
-```
+Query preprocessing is aligned with the index pipeline:
+- pipeline type is read from index metadata (or selected file name),
+- language suffix (`_cs`, `_sk`, `_en`) is resolved,
+- the same preprocessing pipeline/language combination is applied to queries.
 
-Or through the main dispatcher:
+This applies to both TF-IDF and Boolean query paths.
 
-```bash
-python main.py indexing --index-pipeline baseline
-```
+## Project Structure
 
-**Output:**
-- Persisted index: `data/index/inverted_index_<pipeline>.json`
-
-### 4. Information Retrieval Search
-
-Run retrieval against persisted index:
-
-```bash
-python retrieval/tfidf_search.py --pipeline baseline --query "turistika tatry"
-```
-
-Or via the root CLI:
-
-```bash
-python main.py retrieval --index-pipeline baseline --query "turistika tatry" --top-k 10
-```
-
-Legacy compatibility mode (collection files with `d*/q*`) is still available:
-
-```bash
-python retrieval/tfidf_search.py retrieval/test1.txt retrieval/test2.txt
-```
-
-**Import format for collections:**
-```
-d1: Document 1 text here
-d2: Document 2 text here
-q1: Query 1 text here
-q2: Query 2 text here
-```
-
-**Output:**
-- Term DF/IDF table
-- Document vectors with per-term TF-IDF breakdown
-- Query vectors and ranked document results
-
-## Module Execution
-
-All entry points support **both script and module execution**:
-
-```bash
-# Script mode
-python pipeline.py --help
-
-# Module mode
-python -m pipeline.main --help
-```
-
-### Main Entry Point
-
-Unified dispatcher for the full pipeline:
-
-```bash
-python main.py -h
-```
-
-**Stages:**
-- `interactive` (default) — menu-driven pipeline
-- `crawler` — run web crawler
-- `preprocessing` — run text preprocessing
-- `indexing` — build persisted inverted index
-- `retrieval` — query persisted index (or run legacy file mode)
-- `all` — crawler → preprocessing → indexing → retrieval
-
-Example:
-
-```bash
-python main.py all --continue-on-error
-```
-
-### Crawler
-
-```bash
-python crawler/crawler.py
-python -m crawler.crawler
-```
-
-### Preprocessing
-
-```bash
-python preprocessing/main.py
-python -m preprocessing.main
-
-# With options:
-python preprocessing/main.py --input data/crawler/crawled_pages.json \
-                              --text-key article_text \
-                              --pipelines all \
-                              --output-dir data/preprocessed
-```
-
-### Information Retrieval
-
-```bash
-python retrieval/tfidf_search.py
-python -m retrieval.tfidf_search
-
-# With custom collection:
-python retrieval/tfidf_search.py my_collection.txt
+```text
+.
+├── main.py
+├── app_config.py
+├── interactive.py
+├── runner.py
+├── crawler/
+│   ├── crawler.py
+│   └── README.md
+├── preprocessing/
+│   ├── config.py
+│   ├── language_config.py
+│   ├── dataset.py
+│   ├── orchestration.py
+│   ├── preprocess.py
+│   ├── tokenizer.py
+│   ├── main.py
+│   └── README.md
+├── indexing/
+│   └── main.py
+├── retrieval/
+│   ├── tfidf.py
+│   ├── tfidf_search.py
+│   ├── boolean.py
+│   ├── query_interface.py
+│   ├── dataset.py
+│   ├── workflow.py
+│   ├── reporting.py
+│   ├── scoring.py
+│   └── boolean_search.py
+└── data/
+    ├── crawler/
+    ├── preprocessed/
+    └── index/
 ```
 
 ## Configuration
 
-### Global Config ([app_config.py](app_config.py))
+### Global config
 
-```python
-ROOT = Path(__file__).resolve().parent
-CRAWLER_SCRIPT = ROOT / "crawler" / "crawler.py"
-PREPROCESSING_SCRIPT = ROOT / "preprocessing" / "main.py"
-RETRIEVAL_SCRIPT = ROOT / "retrieval" / "tfidf_search.py"
+See `app_config.py`:
+- `ROOT`
+- `CRAWLER_SCRIPT`
+- `CRAWLER_DATA_FILE`
+- `CRAWLER_LOG_FILE`
+- `PREPROCESSED_DIR`
+- `INDEX_DIR`
+- `PIPELINE_OPTIONS`
 
-DEFAULT_INPUT = ROOT / "data" / "crawler" / "crawled_pages.json"
-DEFAULT_OUTPUT_DIR = ROOT / "data" / "preprocessed"
-```
+### Crawler config
 
-### Crawler Config
+Tune crawler settings directly in `crawler/crawler.py` (request delay, max URLs, robots/sitemap handling, URL filtering).
 
-Edit `crawler/crawler.py`:
+### Preprocessing config
 
-```python
-INIT_URL = 'https://www.interez.sk/'
-ROBOTS_URL = 'https://www.interez.sk/robots.txt'
-SITEMAP_URL = 'https://www.interez.sk/sitemap.xml'
-MAX_URLS = 1000
-REQUEST_DELAY = 3  # seconds
-DISALLOWED_PATHS = ['/profil/', '/kontakt/', '/o-nas/']
-```
+See `preprocessing/config.py` for pipeline definitions.
 
-### Preprocessing Config
+Language resources are centralized in:
+- `preprocessing/language_config.py`
 
-Edit `preprocessing/config.py`:
+## Legacy/Standalone Module Notes
 
-```python
-PIPELINE_NAMES = [
-    "baseline",
-    "stemming",
-    "lemmatization",
-    "stemming_no_diacritics",
-    "lemmatization_no_diacritics",
-]
-```
-
-Stopwords: `preprocessing/preprocess.py` → `CZECH_STOPWORDS` set
-
-## Workflow Examples
-
-### Complete Pipeline (Crawler → Preprocessing → TF-IDF)
-
-```bash
-# Option 1: Interactive menu
-python main.py interactive
-
-# Option 2: Run all stages in sequence
-python main.py all
-
-# Option 3: With error tolerance
-python main.py all --continue-on-error
-```
-
-### Preprocess Existing Crawled Data
-
-```bash
-python preprocessing/main.py \
-  --input data/crawler/crawled_pages.json \
-  --text-key article_text \
-  --pipelines baseline stemming \
-  --output-dir data/preprocessed
-```
-
-### Information Retrieval Search
-
-1. Create a collection file (JSONL-style):
-
-```
-d1: First article about Python
-d2: Second article about JavaScript
-q1: What is Python?
-q2: JavaScript frameworks
-```
-
-2. Run search:
-
-```bash
-python retrieval/tfidf_search.py my_collection.txt
-```
-
-3. Review output:
-   - Term statistics (DF, IDF)
-   - Document vector breakdowns
-   - Query rankings
-
-## Development
-
-### Adding a New Preprocessing Step
-
-1. Create a class in `preprocessing/preprocess.py`:
-
-```python
-class MyPreprocessor(TokenPreprocessor):
-    def preprocess(self, token: Token, document: str) -> Token:
-        token.processed_form = token.processed_form.upper()
-        return token
-```
-
-2. Add to pipeline in `preprocessing/config.py`:
-
-```python
-BASE_STEPS.append(MyPreprocessor())
-```
-
-### Extending Extraction Logic
-
-Edit `retrieval/dataset.py` (`CollectionParser`) or crawler extraction functions in `crawler/crawler.py`.
-
-### Inverted Index Optimization (TF-IDF Retrieval)
-
-The `retrieval/scoring.py` module uses a **dictionary-based inverted index** (`postings`) to optimize search performance. Instead of scoring every document in the collection, the `CosineScorer.search()` method:
-
-1. **Extracts query terms** from the query text
-2. **Uses the inverted index** to find candidate documents that contain at least one query term
-3. **Scores only candidates** rather than all documents
-
-This significantly improves efficiency for large collections by reducing unnecessary similarity computations.
-
-**Key data structures in `InvertedIndex`:**
-- `postings: Dict[str, Dict[str, int]]` — maps each term to documents containing it with term frequencies
-- `doc_vectors, doc_norms` — precomputed TF-IDF vectors for cosine similarity
-- `idf` — precomputed inverse document frequency for each term
-
-### Running Tests
-
-No test suite yet — consider adding pytest for:
-- URL validation
-- Tokenization
-- Extraction accuracy
-- Vector math
+Some submodules still contain standalone `main()` functions (for direct module execution), but the intended user flow is interactive via `python main.py`.
 
 ## Troubleshooting
 
-**"No input files found for TF-IDF run"**
-- Ensure `retrieval/test1.txt` and `retrieval/test2.txt` exist, or provide file paths
-- Example: `python retrieval/tfidf_search.py my_file.txt`
-
-**"Unable to determine text key automatically"**
-- Your crawler output doesn't have `article_text`, `text`, or detectable keys
-- Use `--list-text-keys` to see available keys
-- Specify manually: `--text-key your_key`
-
-**Crawler hangs or times out**
-- Increase timeout in `crawler/crawler.py`: `timeout=10` → `timeout=30`
-- Reduce `REQUEST_DELAY` (but be respectful to the server)
-
-**"ModuleNotFoundError: No module named 'simplemma'"**
-- Install: `pip install simplemma`
-
-## License & Notes
-
-This is an educational IR pipeline for coursework. 
-- Respectful crawling: configurable delays, robots.txt support
-- Stateful: resume crawls on crash
-- Modular: each stage can run independently
-
----
-
-**Questions?** Check individual README files in each module directory.
+- If retrieval finds no index files, run preprocessing + indexing first.
+- If Boolean returns no matches for expected terms, verify you selected the intended index file and language variant.
+- If a query has terms unseen in the selected index, both TF-IDF and Boolean may return no results.
