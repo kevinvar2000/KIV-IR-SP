@@ -1,18 +1,11 @@
 import time
 from pathlib import Path
 
-try:
-    from .config import DEFAULT_INPUT, DEFAULT_OUTPUT_DIR, build_pipelines, normalize_language_code
-    from .dataset import load_records, detect_text_keys, normalize_docs
-    from .orchestration import parse_pipeline_selection, process_pipeline
-    from .tokenizer import RegexMatchTokenizer
-    from .dataset import write_weighted_vocab, write_jsonl_records
-except ImportError:
-    from config import DEFAULT_INPUT, DEFAULT_OUTPUT_DIR, build_pipelines, normalize_language_code
-    from dataset import load_records, detect_text_keys, normalize_docs
-    from orchestration import parse_pipeline_selection, process_pipeline
-    from tokenizer import RegexMatchTokenizer
-    from dataset import write_weighted_vocab, write_jsonl_records
+from .config import DEFAULT_INPUT, DEFAULT_OUTPUT_DIR, build_pipelines, normalize_language_code
+from .dataset import load_records, detect_text_keys, normalize_docs
+from .orchestration import parse_pipeline_selection, process_pipeline
+from .tokenizer import RegexMatchTokenizer
+from .dataset import write_weighted_vocab, write_jsonl_records
 
 
 def run_preprocessing_stage(
@@ -111,10 +104,7 @@ def run_preprocessing_stage(
         print(f"[baseline_compat] wrote {compat_path}")
 
     if not skip_index:
-        try:
-            from indexing.main import run_indexing_stage
-        except ImportError:
-            from ..indexing.main import run_indexing_stage
+        from indexing.main import run_indexing_stage
 
         for pipeline_name in selected_pipeline_names:
             pipeline_with_language = f"{pipeline_name}{artifact_suffix}"

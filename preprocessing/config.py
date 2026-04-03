@@ -1,31 +1,17 @@
 from pathlib import Path
 
-try:
-    from .tokenizer import TokenType
-    from .language_config import normalize_language_code
-    from .preprocess import (
-        PreprocessingPipeline,
-        LowercasePreprocessor,
-        LemmatizationPreprocessor,
-        MinLengthPreprocessor,
-        RemoveDiacriticsPreprocessor,
-        RemoveTokenTypesPreprocessor,
-        StemmingPreprocessor,
-        StopwordPreprocessor,
-    )
-except ImportError:
-    from tokenizer import TokenType
-    from language_config import normalize_language_code
-    from preprocess import (
-        PreprocessingPipeline,
-        LowercasePreprocessor,
-        LemmatizationPreprocessor,
-        MinLengthPreprocessor,
-        RemoveDiacriticsPreprocessor,
-        RemoveTokenTypesPreprocessor,
-        StemmingPreprocessor,
-        StopwordPreprocessor,
-    )
+from .tokenizer import TokenType
+from .language_config import normalize_language_code
+from .preprocess import (
+    PreprocessingPipeline,
+    LowercasePreprocessor,
+    LemmatizationPreprocessor,
+    MinLengthPreprocessor,
+    RemoveDiacriticsPreprocessor,
+    RemoveTokenTypesPreprocessor,
+    StemmingPreprocessor,
+    StopwordPreprocessor,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = ROOT / "data" / "crawler" / "crawled_pages.json"

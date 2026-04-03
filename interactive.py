@@ -11,7 +11,6 @@ from app_config import (
 from crawler.crawler import run_crawler
 from indexing.main import run_indexing_stage
 from preprocessing.main import run_preprocessing_stage
-from retrieval.tfidf_search import run_retrieval_stage
 from retrieval.query_interface import run_interactive_query_loop
 from runner import run_crawler_background
 

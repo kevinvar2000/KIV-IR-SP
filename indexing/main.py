@@ -1,16 +1,10 @@
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 
-try:
-    from app_config import INDEX_DIR, PREPROCESSED_DIR
-    from retrieval.tfidf import InvertedIndex
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from app_config import INDEX_DIR, PREPROCESSED_DIR
-    from retrieval.tfidf import InvertedIndex
+from app_config import INDEX_DIR, PREPROCESSED_DIR
+from retrieval.tfidf import InvertedIndex
 
 
 class WhitespacePreprocessor:

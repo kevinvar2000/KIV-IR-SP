@@ -1,9 +1,6 @@
 from typing import Dict, List
 
-try:
-    from .tfidf import InvertedIndex
-except ImportError:
-    from tfidf import InvertedIndex
+from .tfidf import InvertedIndex
 
 
 def render_table(headers: List[str], rows: List[List[str]]) -> str:

@@ -1,12 +1,8 @@
 import argparse
 from pathlib import Path
 
-try:
-    from .dataset import CollectionParser, Preprocessor
-    from .boolean import BooleanIndex, BooleanScorer
-except ImportError:
-    from dataset import CollectionParser, Preprocessor
-    from boolean import BooleanIndex, BooleanScorer
+from .dataset import CollectionParser, Preprocessor
+from .boolean import BooleanIndex, BooleanScorer
 
 
 def resolve_input_files(input_files: list[str]) -> list[Path]:

@@ -3,12 +3,8 @@ from pathlib import Path
 from typing import Iterable
 from collections import Counter
 
-try:
-    from .tokenizer import Tokenizer, RegexMatchTokenizer
-    from .preprocess import PreprocessingPipeline
-except ImportError:
-    from tokenizer import Tokenizer, RegexMatchTokenizer
-    from preprocess import PreprocessingPipeline
+from .tokenizer import Tokenizer, RegexMatchTokenizer
+from .preprocess import PreprocessingPipeline
 
 
 class Document:

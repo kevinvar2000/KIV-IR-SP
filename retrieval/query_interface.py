@@ -2,25 +2,14 @@
 
 import json
 import re
-import sys
 from pathlib import Path
 
-try:
-    from preprocessing.config import build_pipelines
-    from preprocessing.tokenizer import RegexMatchTokenizer
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from preprocessing.config import build_pipelines
-    from preprocessing.tokenizer import RegexMatchTokenizer
+from preprocessing.config import build_pipelines
+from preprocessing.tokenizer import RegexMatchTokenizer
 
-try:
-    from .tfidf import CosineScorer, InvertedIndex
-    from .boolean import BooleanIndex, BooleanScorer
-    from .dataset import Preprocessor
-except ImportError:
-    from tfidf import CosineScorer, InvertedIndex
-    from boolean import BooleanIndex, BooleanScorer
-    from dataset import Preprocessor
+from .tfidf import CosineScorer, InvertedIndex
+from .boolean import BooleanIndex, BooleanScorer
+from .dataset import Preprocessor
 
 
 class PipelineQueryPreprocessor:

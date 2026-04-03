@@ -2,14 +2,9 @@ import hashlib
 import json
 from pathlib import Path
 
-try:
-    from .dataset import CollectionParser, Preprocessor
-    from .reporting import build_term_breakdown_rows, render_table
-    from .tfidf import CosineScorer, InvertedIndex
-except ImportError:
-    from dataset import CollectionParser, Preprocessor
-    from reporting import build_term_breakdown_rows, render_table
-    from tfidf import CosineScorer, InvertedIndex
+from .dataset import CollectionParser, Preprocessor
+from .reporting import build_term_breakdown_rows, render_table
+from .tfidf import CosineScorer, InvertedIndex
 
 
 def _index_file_for_collection(file_path: str | Path) -> Path:

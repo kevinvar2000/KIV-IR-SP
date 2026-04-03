@@ -1,24 +1,13 @@
 import argparse
 import json
-import sys
 from pathlib import Path
 
-try:
-    from app_config import INDEX_DIR
-    from preprocessing.config import build_pipelines
-    from preprocessing.tokenizer import RegexMatchTokenizer
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from app_config import INDEX_DIR
-    from preprocessing.config import build_pipelines
-    from preprocessing.tokenizer import RegexMatchTokenizer
+from app_config import INDEX_DIR
+from preprocessing.config import build_pipelines
+from preprocessing.tokenizer import RegexMatchTokenizer
 
-try:
-    from .tfidf import CosineScorer, InvertedIndex
-    from .workflow import run_collection
-except ImportError:
-    from tfidf import CosineScorer, InvertedIndex
-    from workflow import run_collection
+from .tfidf import CosineScorer, InvertedIndex
+from .workflow import run_collection
 
 
 def resolve_input_files(input_files: list[str]) -> list[Path]:

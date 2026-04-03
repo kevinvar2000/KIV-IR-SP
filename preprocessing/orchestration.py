@@ -1,15 +1,9 @@
 import time
 
-try:
-    from .config import PIPELINE_NAMES
-    from .dataset import Document, build_vocabulary, write_weighted_vocab
-    from .tokenizer import Tokenizer, RegexMatchTokenizer
-    from .preprocess import PreprocessingPipeline
-except ImportError:
-    from config import PIPELINE_NAMES
-    from dataset import Document, build_vocabulary, write_weighted_vocab
-    from tokenizer import Tokenizer, RegexMatchTokenizer
-    from preprocess import PreprocessingPipeline
+from .config import PIPELINE_NAMES
+from .dataset import Document, build_vocabulary
+from .tokenizer import Tokenizer
+from .preprocess import PreprocessingPipeline
 
 
 def parse_pipeline_selection(raw_selection: list[str]) -> list[str]:

@@ -3,12 +3,8 @@ import unicodedata
 
 import simplemma
 
-try:
-    from .tokenizer import Token, TokenType
-    from .language_config import get_stopwords, normalize_language_code
-except ImportError:
-    from tokenizer import Token, TokenType
-    from language_config import get_stopwords, normalize_language_code
+from .tokenizer import Token, TokenType
+from .language_config import get_stopwords, normalize_language_code
 
 
 class TokenPreprocessor(ABC):
