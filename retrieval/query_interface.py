@@ -247,7 +247,7 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
         print(f"Error loading index: {e}")
         return 1
     
-    print(f"\n✓ Loaded index: {index_path.name}")
+    print(f"\nLoaded index: {index_path.name}")
     print(f"  Pipeline: {resolved_pipeline}")
     print(f"  Documents: {tfidf_index.num_docs}, Terms: {len(tfidf_index.postings)}")
     if metadata:
@@ -283,7 +283,7 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     
     while True:
         try:
-            query = input("\n📝 Enter query: ").strip()
+            query = input("\nEnter query: ").strip()
             
             if not query:
                 continue
@@ -292,7 +292,7 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
                 print("\nGoodbye!")
                 return 0
             
-            print(f"\n🔍 Searching for: '{query}'")
+            print(f"\nSearching for: '{query}'")
             
             if search_method == "tfidf":
                 ranked = tfidf_scorer.search(query)
