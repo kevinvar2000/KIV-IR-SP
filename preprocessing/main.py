@@ -2,15 +2,13 @@ import time
 from pathlib import Path
 
 try:
-    from .cli import parse_args
-    from .config import DEFAULT_INPUT, build_pipelines, normalize_language_code
+    from .config import DEFAULT_INPUT, DEFAULT_OUTPUT_DIR, build_pipelines, normalize_language_code
     from .dataset import load_records, detect_text_keys, normalize_docs
     from .orchestration import parse_pipeline_selection, process_pipeline
     from .tokenizer import RegexMatchTokenizer
     from .dataset import write_weighted_vocab, write_jsonl_records
 except ImportError:
-    from cli import parse_args
-    from config import DEFAULT_INPUT, build_pipelines, normalize_language_code
+    from config import DEFAULT_INPUT, DEFAULT_OUTPUT_DIR, build_pipelines, normalize_language_code
     from dataset import load_records, detect_text_keys, normalize_docs
     from orchestration import parse_pipeline_selection, process_pipeline
     from tokenizer import RegexMatchTokenizer
@@ -135,17 +133,11 @@ def run_preprocessing_stage(
 
 
 def main() -> int:
-    args = parse_args()
     return run_preprocessing_stage(
-        input_path=args.input,
-        output_dir=args.output_dir,
-        text_key=args.text_key,
-        pipeline_selection=args.pipelines,
-        language=args.language,
-        progress_every=args.progress_every,
-        no_compat_vocab=args.no_compat_vocab,
-        list_text_keys=args.list_text_keys,
-        skip_index=args.skip_index,
+        input_path=DEFAULT_INPUT,
+        output_dir=DEFAULT_OUTPUT_DIR,
+        pipeline_selection=["all"],
+        language="cs",
     )
 
 
