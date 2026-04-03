@@ -2,6 +2,7 @@ from pathlib import Path
 
 try:
     from .tokenizer import TokenType
+    from .language_config import normalize_language_code
     from .preprocess import (
         PreprocessingPipeline,
         LowercasePreprocessor,
@@ -11,10 +12,10 @@ try:
         RemoveTokenTypesPreprocessor,
         StemmingPreprocessor,
         StopwordPreprocessor,
-        normalize_language_code,
     )
 except ImportError:
     from tokenizer import TokenType
+    from language_config import normalize_language_code
     from preprocess import (
         PreprocessingPipeline,
         LowercasePreprocessor,
@@ -24,7 +25,6 @@ except ImportError:
         RemoveTokenTypesPreprocessor,
         StemmingPreprocessor,
         StopwordPreprocessor,
-        normalize_language_code,
     )
 
 ROOT = Path(__file__).resolve().parents[1]
