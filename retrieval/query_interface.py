@@ -4,7 +4,8 @@ import json
 import re
 from pathlib import Path
 
-from preprocessing.config import build_pipelines
+from preprocessing.config import PIPELINE_NAMES, build_pipelines
+from preprocessing.language_config import normalize_language_code
 from preprocessing.tokenizer import RegexMatchTokenizer
 
 from .tfidf import CosineScorer, InvertedIndex
@@ -15,11 +16,25 @@ from .dataset import Preprocessor
 class PipelineQueryPreprocessor:
     """Apply the same preprocessing pipeline to queries as used for index generation."""
 
+    @staticmethod
+    def _resolve_pipeline_and_language(pipeline_name: str) -> tuple[str, str]:
+        normalized = pipeline_name.strip()
+        if normalized in PIPELINE_NAMES:
+            return normalized, "cs"
+
+        for language_code in ("cs", "sk", "en"):
+            suffix = f"_{language_code}"
+            if normalized.endswith(suffix):
+                candidate = normalized[: -len(suffix)]
+                if candidate in PIPELINE_NAMES:
+                    return candidate, normalize_language_code(language_code)
+
+        raise ValueError(f"Unknown preprocessing pipeline for query mode: {pipeline_name}")
+
     def __init__(self, pipeline_name: str):
-        pipelines = build_pipelines()
-        if pipeline_name not in pipelines:
-            raise ValueError(f"Unknown preprocessing pipeline for query mode: {pipeline_name}")
-        self.pipeline = pipelines[pipeline_name]
+        resolved_pipeline, resolved_language = self._resolve_pipeline_and_language(pipeline_name)
+        pipelines = build_pipelines(resolved_language)
+        self.pipeline = pipelines[resolved_pipeline]
         self.tokenizer = RegexMatchTokenizer()
 
     def tokenize(self, text: str) -> list[str]:
@@ -176,11 +191,14 @@ def _ask_search_method() -> str:
         print("Invalid choice. Please enter 1 or 2.")
 
 
-def _build_boolean_index_from_tfidf_docs(index: InvertedIndex, docs: dict[str, str], pipeline_name: str) -> BooleanIndex:
-    """Convert TF-IDF index to Boolean index when user wants Boolean search."""
-    preprocessor = Preprocessor()
+def _build_boolean_index_from_tfidf_docs(index: InvertedIndex) -> BooleanIndex:
+    """Convert loaded TF-IDF structures into a Boolean index with matching term space."""
     boolean_index = BooleanIndex()
-    boolean_index.build(docs, preprocessor)
+    boolean_index.documents = {doc_id: "" for doc_id in index.doc_term_freqs.keys()}
+    boolean_index.postings = {
+        term: set(posting.keys())
+        for term, posting in index.postings.items()
+    }
     return boolean_index
 
 
@@ -260,17 +278,8 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     query_preprocessor = PipelineQueryPreprocessor(resolved_pipeline)
     
     if search_method == "boolean":
-        boolean_index = BooleanIndex()
-        if doc_texts:
-            preprocessor = Preprocessor()
-            boolean_index.build(doc_texts, preprocessor)
-        else:
-            # Try to reconstruct from TF-IDF index postings
-            preprocessor = Preprocessor()
-            documents = {doc_id: f"[document with terms]" for doc_id in tfidf_index.doc_term_freqs.keys()}
-            boolean_index.build(documents, preprocessor)
-        
-        boolean_scorer = BooleanScorer(boolean_index, preprocessor)
+        boolean_index = _build_boolean_index_from_tfidf_docs(tfidf_index)
+        boolean_scorer = BooleanScorer(boolean_index, query_preprocessor)
     else:
         tfidf_scorer = CosineScorer(tfidf_index, query_preprocessor)
     

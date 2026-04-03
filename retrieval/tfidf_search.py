@@ -3,7 +3,8 @@ import json
 from pathlib import Path
 
 from app_config import INDEX_DIR
-from preprocessing.config import build_pipelines
+from preprocessing.config import PIPELINE_NAMES, build_pipelines
+from preprocessing.language_config import normalize_language_code
 from preprocessing.tokenizer import RegexMatchTokenizer
 
 from .tfidf import CosineScorer, InvertedIndex
@@ -49,11 +50,25 @@ def load_index_payload(index_path: Path) -> tuple[InvertedIndex, dict]:
 class PipelineQueryPreprocessor:
     """Apply the same preprocessing pipeline to queries as used for index generation."""
 
+    @staticmethod
+    def _resolve_pipeline_and_language(pipeline_name: str) -> tuple[str, str]:
+        normalized = pipeline_name.strip()
+        if normalized in PIPELINE_NAMES:
+            return normalized, "cs"
+
+        for language_code in ("cs", "sk", "en"):
+            suffix = f"_{language_code}"
+            if normalized.endswith(suffix):
+                candidate = normalized[: -len(suffix)]
+                if candidate in PIPELINE_NAMES:
+                    return candidate, normalize_language_code(language_code)
+
+        raise ValueError(f"Unknown preprocessing pipeline for query mode: {pipeline_name}")
+
     def __init__(self, pipeline_name: str):
-        pipelines = build_pipelines()
-        if pipeline_name not in pipelines:
-            raise ValueError(f"Unknown preprocessing pipeline for query mode: {pipeline_name}")
-        self.pipeline = pipelines[pipeline_name]
+        resolved_pipeline, resolved_language = self._resolve_pipeline_and_language(pipeline_name)
+        pipelines = build_pipelines(resolved_language)
+        self.pipeline = pipelines[resolved_pipeline]
         self.tokenizer = RegexMatchTokenizer()
 
     def tokenize(self, text: str) -> list[str]:
