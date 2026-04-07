@@ -1,3 +1,5 @@
+"""Stateful website crawler that stores scraped pages as JSONL records."""
+
 # import scrapy
 import json
 from bs4 import BeautifulSoup
@@ -32,11 +34,13 @@ OUTPUT_FILE = DATA_DIR / 'crawled_pages.json'
 
 
 def index_url(url):
+    """Placeholder hook for URL indexing side effects."""
     # Add the URL to the index (e.g., save to a database or file)
     pass
 
 
 def extract_urls_from_sitemap(sitemap_content):
+    """Extract URL entries from sitemap XML content using simple line parsing."""
     urls = []
     for line in sitemap_content.splitlines():
         if line.strip().startswith('<loc>') and line.strip().endswith('</loc>'):
@@ -47,10 +51,12 @@ def extract_urls_from_sitemap(sitemap_content):
 
 
 def is_valid_url(url):
+    """Return True when URL belongs to the configured crawl domain."""
     return url.startswith(INIT_URL)
 
 
 def is_allowed_by_robots(url):
+    """Check URL against locally tracked disallowed path prefixes."""
 
     for disallowed_path in DISALLOWED_PATHS:
         if url.startswith(disallowed_path):
@@ -59,6 +65,7 @@ def is_allowed_by_robots(url):
 
 
 def save_state():
+    """Persist crawler queues and settings to the state file."""
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -74,6 +81,7 @@ def save_state():
 
 
 def load_state():
+    """Load crawler state from disk if present."""
     try:
         with open(STATE_FILE, 'r', encoding='utf-8') as f:
             state = json.load(f)
@@ -90,6 +98,7 @@ def load_state():
 
 
 def store_data(url, content):
+    """Extract article metadata and append a JSONL record to output."""
     title = extract_title(content)
     author = extract_author(content)
     topic = extract_topic(content)
@@ -114,6 +123,7 @@ def store_data(url, content):
 
 
 def extract_title(content):
+    """Extract page title text from HTML."""
     soup = BeautifulSoup(content, 'html.parser')
     title_tag = soup.find('title')
     if title_tag:
@@ -122,6 +132,7 @@ def extract_title(content):
 
 
 def extract_author(content):
+    """Extract author from meta tag, if available."""
     soup = BeautifulSoup(content, 'html.parser')
     author_tag = soup.find('meta', attrs={'name': 'author'})
     if author_tag and 'content' in author_tag.attrs:
@@ -130,6 +141,7 @@ def extract_author(content):
 
 
 def extract_topic(content):
+    """Extract topic label from page markup, if available."""
     soup = BeautifulSoup(content, 'html.parser')
     topic_tag = soup.find('a', class_='topic')
     if topic_tag:
@@ -138,6 +150,7 @@ def extract_topic(content):
 
 
 def extract_article_text(content):
+    """Extract main article text from the expected article container."""
     soup = BeautifulSoup(content, 'html.parser')
     article_tag = soup.find('article', id='clanok')
     if article_tag:
@@ -146,6 +159,7 @@ def extract_article_text(content):
 
 
 def extract_publication_date(content):
+    """Extract publication datetime from article metadata."""
     soup = BeautifulSoup(content, 'html.parser')
     pub_date_tag = soup.find('time', class_='entry-date')
 
@@ -157,6 +171,7 @@ def extract_publication_date(content):
 
 
 def extract_urls_from_page(content):
+    """Extract crawlable links from a page and append new ones to pending queue."""
     urls = []
     soup = BeautifulSoup(content, 'html.parser')
     for link in soup.find_all('a', href=True):
@@ -168,6 +183,7 @@ def extract_urls_from_page(content):
 
 
 def download_page(url):
+    """Download a page and return text body on successful response."""
     try:
         response = requests.get(url, headers=REQUEST_HEADERS, timeout=10)
         if response.status_code == 200:
@@ -181,6 +197,7 @@ def download_page(url):
 
 
 def crawl():
+    """Process pending URLs until queue is exhausted."""
     while PENDING_URLS:
 
         url = PENDING_URLS.pop(0)
@@ -212,6 +229,7 @@ def crawl():
 
 
 def fetch_sitemap(sitemap_url):
+    """Fetch sitemap (and nested sitemaps) and enqueue discovered URLs."""
     if sitemap_url is None:
         sitemap_url = SITEMAP_URL
 
@@ -239,6 +257,7 @@ def fetch_sitemap(sitemap_url):
 
 
 def fetch_robots_txt():
+    """Read robots.txt and update allow/disallow rules and sitemap sources."""
     response = requests.get(ROBOTS_URL)
     if response.status_code == 200:
         content = response.text
@@ -265,14 +284,17 @@ def fetch_robots_txt():
 
 
 def delay():
+    """Sleep for the configured crawler delay interval."""
     time.sleep(REQUEST_DELAY)
 
 
 def print_progress():
+    """Print current visited/pending queue statistics."""
     print(f'Visited URLs: {len(VISITED_URLS)} | Pending URLs: {len(PENDING_URLS)}')
 
 
 def run_crawler() -> int:
+    """Run crawler lifecycle with resume support and elapsed-time reporting."""
     print('Crawling started...')
     start_time = time.time()
 

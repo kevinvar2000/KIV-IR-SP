@@ -1,3 +1,5 @@
+"""Terminal reporting helpers for TF-IDF diagnostics and tables."""
+
 from typing import Dict, List
 
 from .tfidf import InvertedIndex

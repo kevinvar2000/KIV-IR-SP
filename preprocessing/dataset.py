@@ -1,3 +1,5 @@
+"""Dataset parsing, normalization, and output helpers for preprocessing."""
+
 import json
 from pathlib import Path
 from typing import Iterable
@@ -8,22 +10,28 @@ from .preprocess import PreprocessingPipeline
 
 
 class Document:
+    """Mutable document wrapper carrying raw text and tokenized/preprocessed state."""
+
     def __init__(self, text: str):
+        """Initialize document with source text."""
         self.text = text
         self.tokens = None
         self.vocab = None
 
     def tokenize(self, tokenizer: Tokenizer = None):
+        """Tokenize document text using provided tokenizer."""
         tokenizer = tokenizer or RegexMatchTokenizer()
         self.tokens = tokenizer.tokenize(self.text)
         return self
 
     def preprocess(self, preprocessing_pipeline: PreprocessingPipeline):
+        """Apply preprocessing pipeline to current token stream."""
         self.tokens = preprocessing_pipeline.preprocess(self.tokens, self.text)
         return self
 
 
 def build_vocabulary(documents: Iterable[Document]):
+    """Aggregate processed token frequencies across documents."""
     vocab = Counter()
     for doc in documents:
         vocab.update((token.processed_form for token in doc.tokens))
@@ -31,11 +39,13 @@ def build_vocabulary(documents: Iterable[Document]):
 
 
 def write_weighted_vocab(vocab, file):
+    """Write descending frequency vocabulary in plain text format."""
     for key, value in sorted(vocab.items(), key=lambda x: x[1], reverse=True):
         file.write(f"{key} {value}\n")
 
 
 def write_jsonl_records(records: Iterable[dict], output_path: Path) -> None:
+    """Write dictionaries to JSONL file, one record per line."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as file_handle:
         for record in records:
@@ -43,10 +53,12 @@ def write_jsonl_records(records: Iterable[dict], output_path: Path) -> None:
 
 
 def load_records(input_path: Path) -> list[dict]:
+    """Load dataset records from JSON or JSONL input path."""
     if not input_path.exists():
         raise FileNotFoundError(f"Input file does not exist: {input_path}")
 
     def load_jsonl_records() -> list[dict]:
+        """Load newline-delimited JSON objects from file."""
         records: list[dict] = []
         with input_path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -76,6 +88,7 @@ def load_records(input_path: Path) -> list[dict]:
 
 
 def detect_text_keys(records: list[dict], sample_limit: int = 200) -> list[str]:
+    """Detect text-like fields by counting non-empty string values."""
     key_score: dict[str, int] = {}
     for row in records[:sample_limit]:
         if not isinstance(row, dict):
@@ -88,6 +101,7 @@ def detect_text_keys(records: list[dict], sample_limit: int = 200) -> list[str]:
 
 
 def normalize_docs(records: list[dict], text_key: str) -> list[dict]:
+    """Normalize heterogeneous records into unified doc_id/url/text mapping."""
     docs: list[dict] = []
     for idx, row in enumerate(records, start=1):
         if not isinstance(row, dict):

@@ -1,3 +1,5 @@
+"""Shared project paths and preprocessing/indexing option constants."""
+
 from pathlib import Path
 
 

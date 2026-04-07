@@ -1,3 +1,5 @@
+"""Boolean retrieval index and scorer with infix query parsing."""
+
 import re
 from typing import Dict, List, Set, Tuple
 
@@ -6,10 +8,12 @@ class BooleanIndex:
     """Term -> set(doc_id) index for Boolean retrieval."""
 
     def __init__(self) -> None:
+        """Initialize empty postings and document collections."""
         self.postings: Dict[str, Set[str]] = {}
         self.documents: Dict[str, str] = {}
 
     def build(self, documents: Dict[str, str], preprocessor) -> None:
+        """Build unique-term postings lists for each document."""
         self.documents = documents
         for doc_id, text in documents.items():
             seen_terms: Set[str] = set(preprocessor.tokenize(text))
@@ -28,6 +32,7 @@ class BooleanScorer:
     _TOKEN_RE = re.compile(r"\(|\)|\bAND\b|\bOR\b|\bNOT\b|[^\s()]+", flags=re.IGNORECASE)
 
     def __init__(self, index: BooleanIndex, preprocessor, debug: bool = False) -> None:
+        """Initialize scorer with index, query preprocessor, and debug mode."""
         self.index = index
         self.preprocessor = preprocessor
         self.debug = debug
@@ -35,10 +40,12 @@ class BooleanScorer:
 
     @staticmethod
     def _is_operand(token: str) -> bool:
+        """Return True when token is a query term, not an operator or parenthesis."""
         return token not in {"AND", "OR", "NOT", "(", ")"}
 
     @staticmethod
     def _insert_implicit_or(tokens: List[str]) -> List[str]:
+        """Insert implicit OR between adjacent operands/groups when omitted by user."""
         if not tokens:
             return []
 
@@ -55,6 +62,7 @@ class BooleanScorer:
         return expanded
 
     def _tokenize_query(self, query_text: str) -> List[str]:
+        """Tokenize Boolean query into normalized infix token stream."""
         raw_parts = self._TOKEN_RE.findall(query_text.strip())
         tokens: List[str] = []
 
@@ -80,6 +88,7 @@ class BooleanScorer:
         return self._insert_implicit_or(tokens)
 
     def _infix_to_postfix(self, tokens: List[str]) -> List[str]:
+        """Convert infix Boolean expression to postfix using shunting-yard logic."""
         output: List[str] = []
         stack: List[str] = []
 
@@ -122,6 +131,7 @@ class BooleanScorer:
         return output
 
     def _evaluate_postfix(self, postfix_tokens: List[str]) -> Set[str]:
+        """Evaluate postfix Boolean query and return matching document identifiers."""
         all_docs = set(self.index.documents.keys())
         stack: List[Set[str]] = []
 
@@ -154,6 +164,7 @@ class BooleanScorer:
         return stack[0]
 
     def search(self, query_text: str) -> List[Tuple[str, float]]:
+        """Run full Boolean retrieval pipeline and return sorted matches."""
         infix_tokens = self._tokenize_query(query_text)
         if not infix_tokens:
             self.last_debug = {

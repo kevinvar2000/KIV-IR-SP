@@ -3,6 +3,7 @@
 import json
 import re
 from pathlib import Path
+import interactive_config as ui
 
 from preprocessing.config import PIPELINE_NAMES, build_pipelines
 from preprocessing.language_config import normalize_language_code
@@ -18,6 +19,7 @@ class PipelineQueryPreprocessor:
 
     @staticmethod
     def _resolve_pipeline_and_language(pipeline_name: str) -> tuple[str, str]:
+        """Resolve pipeline base name and language suffix from persisted metadata."""
         normalized = pipeline_name.strip()
         if normalized in PIPELINE_NAMES:
             return normalized, "cs"
@@ -32,12 +34,14 @@ class PipelineQueryPreprocessor:
         raise ValueError(f"Unknown preprocessing pipeline for query mode: {pipeline_name}")
 
     def __init__(self, pipeline_name: str):
+        """Initialize query tokenizer and matching preprocessing pipeline."""
         resolved_pipeline, resolved_language = self._resolve_pipeline_and_language(pipeline_name)
         pipelines = build_pipelines(resolved_language)
         self.pipeline = pipelines[resolved_pipeline]
         self.tokenizer = RegexMatchTokenizer()
 
     def tokenize(self, text: str) -> list[str]:
+        """Tokenize and normalize query text using configured pipeline."""
         tokens = self.tokenizer.tokenize(text)
         tokens = self.pipeline.preprocess(tokens, text)
         return [token.processed_form for token in tokens if token.processed_form]
@@ -46,7 +50,7 @@ class PipelineQueryPreprocessor:
 def _format_results(results: list[tuple[str, float]], method: str, metadata: dict[str, dict] | None = None, max_display: int = 10) -> str:
     """Format search results nicely with rank | score | title | link."""
     if not results:
-        return "No matching documents found."
+        return ui.QUERY_FORMAT_NO_MATCH
 
     lines = []
     limited = results[:max_display]
@@ -54,11 +58,11 @@ def _format_results(results: list[tuple[str, float]], method: str, metadata: dic
     # Header
     if method == "tfidf":
         lines.append("=" * 60)
-        lines.append("│ Rank │ Score │ Title                             │ Link")
+        lines.append(ui.QUERY_FORMAT_HEADER_TFIDF)
         lines.append("-" * 60)
     else:
         lines.append("=" * 60)
-        lines.append("│ Rank   │ Title                             │ Link")
+        lines.append(ui.QUERY_FORMAT_HEADER_BOOLEAN)
         lines.append("-" * 60)
     
     for rank, (doc_id, score) in enumerate(limited, start=1):
@@ -83,7 +87,7 @@ def _format_results(results: list[tuple[str, float]], method: str, metadata: dic
     lines.append("=" * 60)
     
     if len(results) > max_display:
-        lines.append(f"\n  ... and {len(results) - max_display} more results")
+        lines.append(ui.QUERY_FORMAT_MORE_RESULTS.format(count=len(results) - max_display))
     
     return "\n".join(lines)
 
@@ -175,20 +179,23 @@ def _print_debug_hits(
         print(f"     {snippet}")
 
 
-def _ask_search_method() -> str:
+def _ask_search_method() -> str | None:
     """Ask user to choose between TF-IDF and Boolean search."""
-    print("\n" + "=" * 60)
-    print("SEARCH METHOD")
-    print("=" * 60)
-    print("1. TF-IDF (ranked retrieval with similarity scores)")
-    print("2. Boolean (exact term matching with AND/OR/NOT operators)")
-    print("=" * 60)
+    print("\n" + ui.DIVIDER)
+    print(ui.QUERY_METHOD_TITLE)
+    print(ui.DIVIDER)
+    print(ui.QUERY_METHOD_LINE_1)
+    print(ui.QUERY_METHOD_LINE_2)
+    print(ui.QUERY_METHOD_LINE_0)
+    print(ui.DIVIDER)
     
     while True:
-        choice = input("Choose search method (1 or 2): ").strip()
+        choice = input(ui.PROMPT_QUERY_METHOD).strip().lower()
         if choice in ("1", "2"):
             return "tfidf" if choice == "1" else "boolean"
-        print("Invalid choice. Please enter 1 or 2.")
+        if choice in {"0", "back", "home", "quit", "exit", "q"}:
+            return None
+        print(ui.QUERY_METHOD_INVALID)
 
 
 def _build_boolean_index_from_tfidf_docs(index: InvertedIndex) -> BooleanIndex:
@@ -217,7 +224,7 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     index_path = Path(index_file)
     
     if not index_path.exists():
-        print(f"Error: Index file not found: {index_path}")
+        print(ui.QUERY_INDEX_NOT_FOUND.format(path=index_path))
         return 1
     
     # Load metadata and document texts from crawler data
@@ -245,7 +252,7 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
                     except json.JSONDecodeError:
                         continue
         except Exception as e:
-            print(f"Note: Could not load document metadata ({e})")
+            print(ui.QUERY_METADATA_LOAD_NOTE.format(error=e))
     
     # Load TF-IDF index
     try:
@@ -262,14 +269,14 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
         tfidf_index = InvertedIndex.from_dict(index_data)
         resolved_pipeline = str(meta.get("pipeline") or pipeline)
     except Exception as e:
-        print(f"Error loading index: {e}")
+        print(ui.QUERY_LOAD_INDEX_ERROR.format(error=e))
         return 1
     
-    print(f"\nLoaded index: {index_path.name}")
-    print(f"  Pipeline: {resolved_pipeline}")
-    print(f"  Documents: {tfidf_index.num_docs}, Terms: {len(tfidf_index.postings)}")
+    print(ui.QUERY_LOADED_INDEX.format(name=index_path.name))
+    print(ui.QUERY_PIPELINE.format(pipeline=resolved_pipeline))
+    print(ui.QUERY_DOCS_TERMS.format(docs=tfidf_index.num_docs, terms=len(tfidf_index.postings)))
     if metadata:
-        print(f"  Metadata: {len(metadata)} documents loaded")
+        print(ui.QUERY_METADATA_COUNT.format(count=len(metadata)))
     
     # Create preprocessors
     query_preprocessor = PipelineQueryPreprocessor(resolved_pipeline)
@@ -278,35 +285,41 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     tfidf_scorer = CosineScorer(tfidf_index, query_preprocessor)
     
     # Query loop
-    print("\n" + "=" * 60)
-    print("QUERY INTERFACE")
-    print("=" * 60)
-    print("Enter queries to search. Type 'quit' or 'exit' to finish.")
-    print("=" * 60)
+    print("\n" + ui.DIVIDER)
+    print(ui.QUERY_INTERFACE_TITLE)
+    print(ui.DIVIDER)
+    print(ui.QUERY_INTERFACE_HELP)
+    print(ui.DIVIDER)
+
+    search_method = _ask_search_method()
+    if search_method is None:
+        print(ui.QUERY_INTERFACE_RETURNING)
+        return 0
+
+    print(ui.QUERY_INTERFACE_SELECTED_METHOD.format(method=search_method))
     
     while True:
         try:
-            query = input("\nEnter query: ").strip()
+            query = input(ui.PROMPT_ENTER_QUERY).strip()
             
             if not query:
                 continue
             
             if query.lower() in ("quit", "exit", "q"):
-                print("\nGoodbye!")
+                print(ui.QUERY_GOODBYE)
                 return 0
-            
-            search_method = _ask_search_method()
-            print(f"\nSearching for: '{query}'")
+
+            print(ui.QUERY_SEARCHING.format(query=query))
             
             if search_method == "tfidf":
                 ranked = tfidf_scorer.search(query)
-                print(f"\nTotal documents found: {len(ranked)}")
-                print(f"Results ({len(ranked)} found):")
+                print(ui.QUERY_TOTAL_FOUND.format(count=len(ranked)))
+                print(ui.QUERY_RESULTS_FOUND.format(count=len(ranked)))
             else:  # boolean
                 ranked = boolean_scorer.search(query)
                 debug_data = boolean_scorer.last_debug
-                print(f"\nTotal documents found: {len(ranked)}")
-                print(f"Results ({len(ranked)} found):")
+                print(ui.QUERY_TOTAL_FOUND.format(count=len(ranked)))
+                print(ui.QUERY_RESULTS_FOUND.format(count=len(ranked)))
                 print(f"[debug][boolean] infix={debug_data.get('infix_tokens', [])}")
                 print(f"[debug][boolean] postfix={debug_data.get('postfix_tokens', [])}")
             
@@ -319,8 +332,8 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
             )
         
         except KeyboardInterrupt:
-            print("\n\nInterrupted by user.")
+            print(ui.QUERY_INTERRUPTED)
             return 0
         except Exception as e:
-            print(f"Error processing query: {e}")
+            print(ui.QUERY_PROCESSING_ERROR.format(error=e))
             continue

@@ -1,11 +1,16 @@
+"""Preprocessing stage runner that writes docs, vocabularies, and index artifacts."""
+
 import time
+import json
 from pathlib import Path
+from collections import Counter
+from datetime import datetime, timezone
 
 from .config import DEFAULT_INPUT, DEFAULT_OUTPUT_DIR, build_pipelines, normalize_language_code
 from .dataset import load_records, detect_text_keys, normalize_docs
-from .orchestration import parse_pipeline_selection, process_pipeline
+from .orchestration import parse_pipeline_selection, process_pipeline_to_files
 from .tokenizer import RegexMatchTokenizer
-from .dataset import write_weighted_vocab, write_jsonl_records
+from .dataset import write_weighted_vocab
 
 
 def run_preprocessing_stage(
@@ -16,11 +21,14 @@ def run_preprocessing_stage(
     pipeline_selection: list[str] | None = None,
     language: str = "cs",
     progress_every: int = 1000,
+    write_vocab: bool = True,
     no_compat_vocab: bool = False,
     list_text_keys: bool = False,
     skip_index: bool = False,
 ) -> int:
+    """Run preprocessing pipelines and write docs, vocab, index, and artifact metadata."""
     run_start = time.perf_counter()
+    run_started_at = datetime.now(timezone.utc)
 
     input_path = Path(input_path)
     output_dir = Path(output_dir)
@@ -69,36 +77,52 @@ def run_preprocessing_stage(
     selected_pipeline_names = parse_pipeline_selection(
         pipeline_selection if pipeline_selection is not None else ["all"]
     )
-    pipeline_results: dict[str, tuple[dict, list[dict]]] = {}
+    pipeline_vocabs: dict[str, Counter] = {}
+    pipeline_artifacts: dict[str, dict[str, str | None]] = {}
 
     for name in selected_pipeline_names:
         p_start = time.perf_counter()
-        vocab, normalized_docs = process_pipeline(
+        docs_out_path = output_dir / f"docs_{name}{artifact_suffix}.jsonl"
+        vocab = process_pipeline_to_files(
             name,
             pipeline_map[name],
             raw_docs,
             tokenizer,
+            docs_output_path=docs_out_path,
             progress_every=progress_every,
         )
-        pipeline_results[name] = (vocab, normalized_docs)
+        pipeline_vocabs[name] = vocab
+        pipeline_artifacts[name] = {
+            "docs": str(docs_out_path),
+            "vocab": None,
+            "index": None,
+        }
 
         out_path = output_dir / f"vocab_{name}{artifact_suffix}.txt"
-        write_start = time.perf_counter()
-        with out_path.open("w", encoding="utf-8") as f:
-            write_weighted_vocab(vocab, f)
+        write_elapsed = 0.0
+        if write_vocab:
+            write_start = time.perf_counter()
+            with out_path.open("w", encoding="utf-8") as f:
+                write_weighted_vocab(vocab, f)
+            write_elapsed = time.perf_counter() - write_start
+            pipeline_artifacts[name]["vocab"] = str(out_path)
 
-        docs_out_path = output_dir / f"docs_{name}{artifact_suffix}.jsonl"
-        write_jsonl_records(normalized_docs, docs_out_path)
-
-        write_elapsed = time.perf_counter() - write_start
         total_elapsed = time.perf_counter() - p_start
-        print(f"[{name}] wrote {out_path} in {write_elapsed:.1f}s")
+        if write_vocab:
+            print(f"[{name}] wrote {out_path} in {write_elapsed:.1f}s")
+        else:
+            print(f"[{name}] skipped vocab output")
         print(f"[{name}] wrote {docs_out_path}")
         print(f"[{name}] done | terms={len(vocab)} | total={total_elapsed:.1f}s")
 
-    if ("baseline" in selected_pipeline_names) and not no_compat_vocab and normalized_language == "cs":
+    if (
+        write_vocab
+        and ("baseline" in selected_pipeline_names)
+        and not no_compat_vocab
+        and normalized_language == "cs"
+    ):
         compat_path = output_dir / "vocab.txt"
-        baseline_vocab, _ = pipeline_results["baseline"]
+        baseline_vocab = pipeline_vocabs["baseline"]
         with compat_path.open("w", encoding="utf-8") as f:
             write_weighted_vocab(baseline_vocab, f)
         print(f"[baseline_compat] wrote {compat_path}")
@@ -117,12 +141,36 @@ def run_preprocessing_stage(
             )
             if rc != 0:
                 return rc
+            if pipeline_name in pipeline_artifacts:
+                pipeline_artifacts[pipeline_name]["index"] = str(index_output)
 
-    print(f"Run finished in {time.perf_counter() - run_start:.1f}s")
+    run_duration = time.perf_counter() - run_start
+    metadata_path = output_dir / f"artifacts_index_{run_started_at.strftime('%Y%m%d_%H%M%S')}.json"
+    metadata_payload = {
+        "meta": {
+            "created_at_utc": run_started_at.isoformat(),
+            "duration_seconds": round(run_duration, 3),
+            "input_path": str(input_path),
+            "output_dir": str(output_dir),
+            "language": normalized_language,
+            "text_key": selected_key,
+            "pipeline_selection": selected_pipeline_names,
+            "write_vocab": write_vocab,
+            "skip_index": skip_index,
+            "document_count": len(raw_docs),
+        },
+        "artifacts": pipeline_artifacts,
+    }
+    with metadata_path.open("w", encoding="utf-8") as file_handle:
+        json.dump(metadata_payload, file_handle, ensure_ascii=False, indent=2)
+    print(f"[artifacts] wrote {metadata_path}")
+
+    print(f"Run finished in {run_duration:.1f}s")
     return 0
 
 
 def main() -> int:
+    """Run preprocessing stage with default crawler input and all pipelines."""
     return run_preprocessing_stage(
         input_path=DEFAULT_INPUT,
         output_dir=DEFAULT_OUTPUT_DIR,

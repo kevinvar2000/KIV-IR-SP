@@ -1,3 +1,5 @@
+"""Helpers for launching long-running pipeline stages in the background."""
+
 import subprocess
 import sys
 
@@ -5,6 +7,7 @@ from app_config import CRAWLER_LOG_FILE, CRAWLER_SCRIPT, ROOT
 
 
 def run_crawler_background() -> int:
+    """Start the crawler as a background process and stream logs to file."""
     CRAWLER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     cmd = [sys.executable, str(CRAWLER_SCRIPT)]
     creation_flags = 0

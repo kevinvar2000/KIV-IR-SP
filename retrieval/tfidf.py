@@ -1,3 +1,5 @@
+"""Core TF-IDF indexing, vectorization, and cosine scoring primitives."""
+
 import math
 import json
 from pathlib import Path
@@ -167,6 +169,7 @@ class CosineScorer:
     """Scores every document against a query using the direct cosine formula."""
 
     def __init__(self, index: InvertedIndex, preprocessor) -> None:
+        """Bind scorer to an index and query tokenizer/preprocessor."""
         self.index = index
         self.preprocessor = preprocessor
 

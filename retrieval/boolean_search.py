@@ -1,3 +1,5 @@
+"""CLI runner for Boolean retrieval on collection-style dataset files."""
+
 import argparse
 from pathlib import Path
 
@@ -6,6 +8,7 @@ from .boolean import BooleanIndex, BooleanScorer
 
 
 def resolve_input_files(input_files: list[str]) -> list[Path]:
+    """Resolve existing input files or fallback to local test collections."""
     if input_files:
         files = [Path(file) for file in input_files]
     else:
@@ -16,6 +19,7 @@ def resolve_input_files(input_files: list[str]) -> list[Path]:
 
 
 def run_collection(file_path: str | Path) -> None:
+    """Run Boolean retrieval for all queries in one collection file."""
     parser = CollectionParser()
     preprocessor = Preprocessor()
 
@@ -40,6 +44,7 @@ def run_collection(file_path: str | Path) -> None:
 
 
 def main() -> int:
+    """CLI entry point for Boolean retrieval runner."""
     parser = argparse.ArgumentParser(description="Run Boolean search on one or more collection files.")
     parser.add_argument(
         "files",

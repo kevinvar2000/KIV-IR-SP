@@ -1,3 +1,5 @@
+"""Configuration and factory functions for preprocessing pipelines."""
+
 from pathlib import Path
 
 from .tokenizer import TokenType
@@ -26,6 +28,7 @@ PIPELINE_NAMES = [
 ]
 
 def build_base_steps(language: str = "cs") -> list:
+    """Build common preprocessing steps shared by all pipeline variants."""
     normalized_language = normalize_language_code(language)
     return [
         LowercasePreprocessor(),
@@ -36,6 +39,7 @@ def build_base_steps(language: str = "cs") -> list:
 
 
 def build_pipelines(language: str = "cs") -> dict[str, PreprocessingPipeline]:
+    """Create named preprocessing pipelines for a selected language."""
     normalized_language = normalize_language_code(language)
     base_steps = build_base_steps(normalized_language)
     return {

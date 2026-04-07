@@ -1,9 +1,13 @@
+"""Tokenizer implementations and token data structures for text preprocessing."""
+
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 
 class TokenType(Enum):
+    """Enumeration of token categories recognized by regex tokenizer."""
+
     URL = 1
     DATE = 2
     NUMBER = 3
@@ -13,12 +17,15 @@ class TokenType(Enum):
 
 @dataclass
 class Token:
+    """Single token with normalized text and source position metadata."""
+
     processed_form: str
     position: int
     length: int
     token_type: TokenType = TokenType.WORD
 
     def __repr__(self):
+        """Return processed token form for concise debug output."""
         return self.processed_form
 
 
@@ -26,14 +33,19 @@ class Token:
 class Tokenizer(ABC):
     @abstractmethod
     def tokenize(self, document: str) -> list[Token]:
+        """Split input document into ordered token objects."""
         raise NotImplementedError() 
 
 
 class SplitTokenizer(Tokenizer):
+    """Tokenizer that splits text by a single delimiter character."""
+
     def __init__(self, split_char: str):
+        """Initialize tokenizer with delimiter character."""
         self.split_char = split_char
 
     def tokenize(self, document: str) -> list[Token]:
+        """Split document by configured delimiter and return token sequence."""
         tokens = []
         position = 0
         for word in document.split(self.split_char):
@@ -43,6 +55,8 @@ class SplitTokenizer(Tokenizer):
         return tokens
 
 class RegexMatchTokenizer(Tokenizer):
+    """Regex tokenizer with named groups for URL/date/number/word/tag/punctuation."""
+
 
     # Keep more specific patterns first so they are not split by generic ones.
     url_pattern = r'https?://[^\s<>"]+|www\.[^\s<>"]+'
@@ -62,10 +76,12 @@ class RegexMatchTokenizer(Tokenizer):
     # default_pattern = r'(\d+[.,](\d+)?)|([\w]+)|(<.*?>)|([^\w\s]+)'
 
     def __init__(self, pattern: str=default_pattern):
+        """Compile regex pattern used for token extraction."""
         self.pattern = pattern
         self._compiled = re.compile(pattern, re.UNICODE)
 
     def tokenize(self, document: str) -> list[Token]:
+        """Tokenize document using regex named groups and position metadata."""
         tokens = []
         for match in re.finditer(self._compiled, document):
             group_name = match.lastgroup or "WORD"

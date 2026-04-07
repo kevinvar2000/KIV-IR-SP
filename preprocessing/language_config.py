@@ -83,8 +83,24 @@ LANGUAGE_STOPWORDS: dict[str, set[str]] = {
     "en": ENGLISH_STOPWORDS,
 }
 
+# Conservative Czech suffix list for light-weight fallback stemming.
+CZECH_STEM_SUFFIXES: tuple[str, ...] = (
+    "ami", "emi", "ovi", "ách", "ích", "ého", "ěho", "ému", "ěmu",
+    "ové", "ovi", "ého", "ěmi", "ami", "emi", "kami", "kám", "kou",
+    "ami", "ové", "ové", "ost", "ostí", "osti", "ování", "ování",
+    "ové", "ích", "ách", "ům", "em", "om", "ou", "mi", "ho", "mu",
+    "ty", "ti", "te", "ta", "tu", "ch", "ou", "ů", "y", "a", "e", "i",
+)
+
+LANGUAGE_STEM_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "cs": CZECH_STEM_SUFFIXES,
+    "sk": tuple(),
+    "en": tuple(),
+}
+
 
 def normalize_language_code(language: str | None) -> str:
+    """Normalize language aliases to supported short codes."""
     if not language:
         return "cs"
 
@@ -98,4 +114,10 @@ def normalize_language_code(language: str | None) -> str:
 
 
 def get_stopwords(language: str | None = None) -> set[str]:
+    """Return a copy of stopword set for selected language."""
     return set(LANGUAGE_STOPWORDS[normalize_language_code(language)])
+
+
+def get_stem_suffixes(language: str | None = None) -> tuple[str, ...]:
+    """Return language-specific suffixes used for lightweight stemming."""
+    return LANGUAGE_STEM_SUFFIXES[normalize_language_code(language)]

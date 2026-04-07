@@ -1,3 +1,5 @@
+"""Collection-mode retrieval workflow with index caching and report printing."""
+
 import hashlib
 import json
 from pathlib import Path
@@ -8,6 +10,7 @@ from .tfidf import CosineScorer, InvertedIndex
 
 
 def _index_file_for_collection(file_path: str | Path) -> Path:
+    """Return cache index path associated with a collection file."""
     source = Path(file_path).resolve()
     root = Path(__file__).resolve().parent.parent
     index_dir = root / "data" / "index"
@@ -15,6 +18,7 @@ def _index_file_for_collection(file_path: str | Path) -> Path:
 
 
 def _documents_fingerprint(documents: dict[str, str]) -> str:
+    """Compute stable SHA-256 fingerprint of collection documents."""
     hasher = hashlib.sha256()
     for doc_id in sorted(documents.keys()):
         hasher.update(doc_id.encode("utf-8"))
@@ -25,6 +29,7 @@ def _documents_fingerprint(documents: dict[str, str]) -> str:
 
 
 def _try_load_cached_index(index_path: Path, source_path: Path, documents: dict[str, str]) -> InvertedIndex | None:
+    """Load cached index only when metadata fingerprint matches current collection."""
     if not index_path.exists():
         return None
 
@@ -52,6 +57,7 @@ def _try_load_cached_index(index_path: Path, source_path: Path, documents: dict[
 
 
 def _save_index_cache(index_path: Path, source_path: Path, documents: dict[str, str], index: InvertedIndex) -> None:
+    """Persist index cache with metadata required for validity checks."""
     index_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "meta": {

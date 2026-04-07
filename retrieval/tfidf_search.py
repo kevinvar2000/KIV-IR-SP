@@ -1,3 +1,5 @@
+"""CLI entry points for index-based and collection-file TF-IDF retrieval modes."""
+
 import argparse
 import json
 from pathlib import Path
@@ -12,6 +14,7 @@ from .workflow import run_collection
 
 
 def resolve_input_files(input_files: list[str]) -> list[Path]:
+    """Resolve provided collection file paths or fallback examples."""
     if input_files:
         files = [Path(file) for file in input_files]
     else:
@@ -22,12 +25,14 @@ def resolve_input_files(input_files: list[str]) -> list[Path]:
 
 
 def resolve_index_file(index_file: str | None, pipeline: str) -> Path:
+    """Resolve index file path from explicit argument or pipeline default."""
     if index_file:
         return Path(index_file)
     return INDEX_DIR / f"inverted_index_{pipeline}.json"
 
 
 def load_index_payload(index_path: Path) -> tuple[InvertedIndex, dict]:
+    """Load serialized index and optional metadata payload from JSON file."""
     if not index_path.exists():
         raise FileNotFoundError(f"Index file not found: {index_path}")
 
@@ -52,6 +57,7 @@ class PipelineQueryPreprocessor:
 
     @staticmethod
     def _resolve_pipeline_and_language(pipeline_name: str) -> tuple[str, str]:
+        """Resolve pipeline base name and language from optional suffix."""
         normalized = pipeline_name.strip()
         if normalized in PIPELINE_NAMES:
             return normalized, "cs"
@@ -66,18 +72,21 @@ class PipelineQueryPreprocessor:
         raise ValueError(f"Unknown preprocessing pipeline for query mode: {pipeline_name}")
 
     def __init__(self, pipeline_name: str):
+        """Create query preprocessor aligned with indexing pipeline settings."""
         resolved_pipeline, resolved_language = self._resolve_pipeline_and_language(pipeline_name)
         pipelines = build_pipelines(resolved_language)
         self.pipeline = pipelines[resolved_pipeline]
         self.tokenizer = RegexMatchTokenizer()
 
     def tokenize(self, text: str) -> list[str]:
+        """Tokenize and preprocess query text into normalized terms."""
         tokens = self.tokenizer.tokenize(text)
         tokens = self.pipeline.preprocess(tokens, text)
         return [token.processed_form for token in tokens if token.processed_form]
 
 
 def run_index_query_mode(index_path: Path, pipeline_name: str, query: str | None, top_k: int) -> int:
+    """Run query-time retrieval directly against a persisted index file."""
     index, meta = load_index_payload(index_path)
 
     resolved_pipeline = str(meta.get("pipeline") or pipeline_name)
@@ -107,6 +116,7 @@ def run_index_query_mode(index_path: Path, pipeline_name: str, query: str | None
 
 
 def _looks_like_collection_file(path: Path, max_lines: int = 30) -> bool:
+    """Heuristically detect legacy collection files containing d*/q* lines."""
     if path.name.lower().startswith("vocab"):
         return False
 
@@ -131,6 +141,7 @@ def _looks_like_collection_file(path: Path, max_lines: int = 30) -> bool:
 
 
 def list_data_files() -> list[Path]:
+    """List candidate legacy collection files under data directory."""
     root = Path(__file__).resolve().parent.parent
     data_dir = root / "data"
     if not data_dir.exists():
@@ -141,6 +152,7 @@ def list_data_files() -> list[Path]:
 
 
 def choose_files_from_data_folder() -> list[Path]:
+    """Interactively choose collection files from the data folder."""
     data_files = list_data_files()
     if not data_files:
         return []
@@ -178,6 +190,7 @@ def choose_files_from_data_folder() -> list[Path]:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for retrieval runner."""
     parser = argparse.ArgumentParser(description="Run TF-IDF search on one or more collection files.")
     parser.add_argument(
         "files",
@@ -219,6 +232,7 @@ def run_retrieval_stage(
     query: str | None = None,
     top_k: int = 10,
 ) -> int:
+    """Run retrieval in index-query mode or legacy collection compatibility mode."""
     files = files or []
 
     if not files:
@@ -241,6 +255,7 @@ def run_retrieval_stage(
 
 
 def main() -> int:
+    """CLI entry point for TF-IDF retrieval runner."""
     args = parse_args()
     return run_retrieval_stage(
         files=args.files,

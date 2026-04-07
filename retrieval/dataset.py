@@ -1,3 +1,5 @@
+"""Collection parsing and lightweight tokenization for retrieval workflows."""
+
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +21,7 @@ class Preprocessor:
     token_pattern = re.compile(r"\b\w+\b", flags=re.UNICODE)
 
     def tokenize(self, text: str) -> List[str]:
+        """Tokenize text into lowercased word terms."""
         return [token.lower() for token in self.token_pattern.findall(text)]
 
 
@@ -27,6 +30,7 @@ class CollectionParser:
 
     @staticmethod
     def _looks_like_vocab_line(line: str) -> bool:
+        """Detect `term count` lines that likely come from vocab outputs."""
         parts = line.split()
         return len(parts) == 2 and parts[1].isdigit()
 
