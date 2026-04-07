@@ -2,10 +2,18 @@
 
 DIVIDER = "=" * 60
 
+# Shared navigation/exit command sets
+EXIT_COMMANDS = {"0", "quit", "exit", "q"}
+HOME_COMMANDS = {"home", "back"}
+NAV_OR_EXIT_COMMANDS = HOME_COMMANDS | EXIT_COMMANDS
+APP_EXIT_SIGNAL = "__exit_app__"
+APP_EXIT_CODE = 2
+
 # Generic prompts and validation
-INVALID_CHOICE = "Invalid choice, please try again."
-INVALID_MENU_OPTION = "Invalid menu option."
+INVALID_CHOICE = "I didn't understand that option."
+INVALID_MENU_OPTION = "I didn't understand that option."
 INTERRUPTED_EXIT = "\nInterrupted by user. Exiting interactive mode."
+APP_GOODBYE = "\nSession ended."
 
 # Stage runner messages
 STAGE_RUNNING = "\n[{name}] running (in-process)"
@@ -14,8 +22,8 @@ STAGE_FAILED_EXIT_CODE = "[{name}] failed with exit code {exit_code}"
 STAGE_FINISHED = "[{name}] finished"
 
 # Shared selection prompts
-PROMPT_CHOOSE_NUMBER_NAV = "Choose option number (or back/home)"
-PROMPT_CHOOSE_NAV = "Choose (or back/home)"
+PROMPT_CHOOSE_NUMBER_NAV = "What would you like to do? (number, 0=exit, home=menu)"
+PROMPT_CHOOSE_NAV = "What would you like to do? (number, 0=exit, home=menu)"
 
 # Preprocessing source selection
 TITLE_PREPROCESS_SOURCE = "\nChoose source file for preprocessing"
@@ -44,7 +52,7 @@ PIPELINE_LINES = [
 ]
 PIPELINE_ALL = "{all_index}. all (runs all pipelines and produces separate output files for each)"
 PIPELINE_NOTE = "\nNote: Stopwords, stemming, and lemmatization follow the selected language."
-PROMPT_CHOOSE_PIPELINES = "Choose one or more numbers (comma-separated)"
+PROMPT_CHOOSE_PIPELINES = "What would you like to do? (numbers comma-separated, 0=exit, home=menu)"
 PROMPT_WRITE_VOCAB = "Write vocab files (vocab_<pipeline>.txt)?"
 
 # Text-key detection
@@ -82,22 +90,22 @@ MAIN_MENU_LINES = [
 	MENU_LINE_4,
 	MENU_LINE_EXIT,
 ]
-PROMPT_MAIN_CHOOSE = "Choose"
+PROMPT_MAIN_CHOOSE = "What would you like to do? (1..4, 0=exit, home=menu)"
 PROMPT_MAIN_DEFAULT = "2"
 
 # Query interface
 QUERY_METHOD_TITLE = "SEARCH METHOD"
 QUERY_METHOD_LINE_1 = "1. TF-IDF (ranked retrieval with similarity scores)"
 QUERY_METHOD_LINE_2 = "2. Boolean (exact term matching with AND/OR/NOT operators)"
-QUERY_METHOD_LINE_0 = "0. back/home/quit"
-PROMPT_QUERY_METHOD = "Choose search method (1/2 or back/home/quit): "
-QUERY_METHOD_INVALID = "Invalid choice. Please enter 1, 2, or back/home/quit."
+QUERY_METHOD_LINE_0 = "0. exit"
+PROMPT_QUERY_METHOD = "What would you like to do? (1..2, 0=exit, home=menu): "
+QUERY_METHOD_INVALID = "I didn't understand that option. Use 1, 2, 0, home, quit, exit, or q."
 
 QUERY_INTERFACE_TITLE = "QUERY INTERFACE"
-QUERY_INTERFACE_HELP = "Enter queries to search. Type 'quit' or 'exit' to finish."
+QUERY_INTERFACE_HELP = "Enter queries to search. Type home/exit/quit/q/0 to return."
 QUERY_INTERFACE_RETURNING = "\nReturning."
 QUERY_INTERFACE_SELECTED_METHOD = "Selected method: {method}"
-PROMPT_ENTER_QUERY = "\nEnter query: "
+PROMPT_ENTER_QUERY = "\nWhat would you like to search? (home/exit/quit/q/0): "
 QUERY_GOODBYE = "\nGoodbye!"
 QUERY_INTERRUPTED = "\n\nInterrupted by user."
 QUERY_SEARCHING = "\nSearching for: '{query}'"

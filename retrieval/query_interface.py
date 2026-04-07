@@ -13,6 +13,10 @@ from .tfidf import CosineScorer, InvertedIndex
 from .boolean import BooleanIndex, BooleanScorer
 from .dataset import Preprocessor
 
+def _is_nav_or_exit_command(value: str) -> bool:
+    """Return True when input requests leaving the current interactive loop."""
+    return value.strip().lower() in ui.NAV_OR_EXIT_COMMANDS
+
 
 class PipelineQueryPreprocessor:
     """Apply the same preprocessing pipeline to queries as used for index generation."""
@@ -57,11 +61,11 @@ def _format_results(results: list[tuple[str, float]], method: str, metadata: dic
     
     # Header
     if method == "tfidf":
-        lines.append("=" * 60)
+        lines.append(ui.DIVIDER)
         lines.append(ui.QUERY_FORMAT_HEADER_TFIDF)
         lines.append("-" * 60)
     else:
-        lines.append("=" * 60)
+        lines.append(ui.DIVIDER)
         lines.append(ui.QUERY_FORMAT_HEADER_BOOLEAN)
         lines.append("-" * 60)
     
@@ -84,7 +88,7 @@ def _format_results(results: list[tuple[str, float]], method: str, metadata: dic
             lines.append(f"│ {rank:2d}  │ {title:33s} │ {doc_url[:30]:30s}")
 
     # Footer
-    lines.append("=" * 60)
+    lines.append(ui.DIVIDER)
     
     if len(results) > max_display:
         lines.append(ui.QUERY_FORMAT_MORE_RESULTS.format(count=len(results) - max_display))
@@ -193,8 +197,10 @@ def _ask_search_method() -> str | None:
         choice = input(ui.PROMPT_QUERY_METHOD).strip().lower()
         if choice in ("1", "2"):
             return "tfidf" if choice == "1" else "boolean"
-        if choice in {"0", "back", "home", "quit", "exit", "q"}:
+        if choice in ui.HOME_COMMANDS:
             return None
+        if choice in ui.EXIT_COMMANDS:
+            return ui.APP_EXIT_SIGNAL
         print(ui.QUERY_METHOD_INVALID)
 
 
@@ -292,6 +298,8 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     print(ui.DIVIDER)
 
     search_method = _ask_search_method()
+    if search_method == ui.APP_EXIT_SIGNAL:
+        return ui.APP_EXIT_CODE
     if search_method is None:
         print(ui.QUERY_INTERFACE_RETURNING)
         return 0
@@ -305,8 +313,8 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
             if not query:
                 continue
             
-            if query.lower() in ("quit", "exit", "q"):
-                print(ui.QUERY_GOODBYE)
+            if _is_nav_or_exit_command(query):
+                print(ui.QUERY_INTERFACE_RETURNING)
                 return 0
 
             print(ui.QUERY_SEARCHING.format(query=query))

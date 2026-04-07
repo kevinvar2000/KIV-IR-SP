@@ -17,6 +17,14 @@ from preprocessing.main import run_preprocessing_stage
 from retrieval.query_interface import run_interactive_query_loop
 from runner import run_crawler_background
 
+class AppExitRequested(Exception):
+    """Raised when user requests full application exit from any submenu."""
+
+
+def _is_exit_command(value: str) -> bool:
+    """Return True if input value means full application exit."""
+    return value.lower() in ui.EXIT_COMMANDS
+
 
 def _sorted_key_names(key_score: dict[str, int]) -> list[str]:
     """Return key names sorted by descending frequency and then alphabetically."""
@@ -49,7 +57,9 @@ def _choose_file_from_menu(
 
         choice = ask_input(ui.PROMPT_CHOOSE_NAV, "1" if files else str(len(files) + 1))
         lowered = choice.lower()
-        if lowered in {"back", "home"}:
+        if _is_exit_command(lowered):
+            raise AppExitRequested()
+        if lowered in ui.HOME_COMMANDS:
             return None
 
         try:
@@ -64,7 +74,9 @@ def _choose_file_from_menu(
             while True:
                 raw_path = ask_input(custom_prompt)
                 lowered_path = raw_path.lower()
-                if lowered_path in {"back", "home"}:
+                if _is_exit_command(lowered_path):
+                    raise AppExitRequested()
+                if lowered_path in ui.HOME_COMMANDS:
                     return None
 
                 candidate = Path(raw_path)
@@ -172,10 +184,12 @@ def ask_yes_no(prompt: str, default_yes: bool = True) -> bool:
 def ask_yes_no_or_nav(prompt: str, default_yes: bool = True) -> bool | str:
     """Prompt for yes/no and allow navigation commands back/home."""
     default_label = "Y/n" if default_yes else "y/N"
-    answer = input(f"{prompt} ({default_label}, back/home): ").strip().lower()
+    answer = input(f"{prompt} ({default_label}, home/exit): ").strip().lower()
     if not answer:
         return default_yes
-    if answer in {"back", "home"}:
+    if _is_exit_command(answer):
+        raise AppExitRequested()
+    if answer in ui.HOME_COMMANDS:
         return answer
     return answer in {"y", "yes"}
 
@@ -191,7 +205,9 @@ def choose_from_list(title: str, options: list[str], default_index: int = 1) -> 
 
         choice_raw = ask_input(ui.PROMPT_CHOOSE_NUMBER_NAV, str(default_index))
         lowered = choice_raw.lower()
-        if lowered in {"back", "home"}:
+        if _is_exit_command(lowered):
+            raise AppExitRequested()
+        if lowered in ui.HOME_COMMANDS:
             return lowered
         try:
             idx = int(choice_raw)
@@ -238,15 +254,19 @@ def choose_language() -> str | None:
 
 def choose_pipelines(language: str) -> list[str]:
     """Choose one or more preprocessing pipelines for the given language."""
+    print(ui.DIVIDER)
     print(ui.PIPELINE_TITLE.format(language=language))
     for line in ui.PIPELINE_LINES:
         print(line)
     print(ui.PIPELINE_ALL.format(all_index=len(PIPELINE_OPTIONS) + 1))
     print(ui.PIPELINE_NOTE)
+    print(ui.DIVIDER)
 
     while True:
         raw = ask_input(ui.PROMPT_CHOOSE_PIPELINES, str(len(PIPELINE_OPTIONS) + 1))
-        if raw.lower() in {"back", "home"}:
+        if _is_exit_command(raw):
+            raise AppExitRequested()
+        if raw.lower() in ui.HOME_COMMANDS:
             return [raw.lower()]
         parts = [part.strip() for part in raw.split(",") if part.strip()]
 
@@ -274,6 +294,9 @@ def choose_pipelines(language: str) -> list[str]:
 
 def run_preprocessing_interactive() -> int:
     """Run interactive preprocessing flow and trigger selected pipelines."""
+    print(ui.DIVIDER)
+    print("PREPROCESSING")
+    print(ui.DIVIDER)
     input_path = choose_preprocessing_input_path()
     if input_path is None:
         return 0
@@ -286,16 +309,18 @@ def run_preprocessing_interactive() -> int:
     if not text_keys:
         print(ui.ERROR_COULD_NOT_DETECT_TEXT_KEYS.format(path=input_path))
         text_key = ask_input(ui.PROMPT_ENTER_TEXT_KEY, "article_text")
-        if text_key.lower() in {"back", "home"}:
+        if _is_exit_command(text_key):
+            raise AppExitRequested()
+        if text_key.lower() in ui.HOME_COMMANDS:
             return 0
     else:
         default_key = "article_text" if "article_text" in text_keys else text_keys[0]
         text_key = choose_from_list(ui.TITLE_DETECTED_TEXT_KEYS, text_keys, text_keys.index(default_key) + 1)
-        if text_key in {"back", "home"}:
+        if text_key in ui.HOME_COMMANDS:
             return 0
 
     pipelines = choose_pipelines(language)
-    if pipelines == ["back"] or pipelines == ["home"]:
+    if len(pipelines) == 1 and pipelines[0] in ui.HOME_COMMANDS:
         return 0
 
     write_vocab = ask_yes_no_or_nav(ui.PROMPT_WRITE_VOCAB, default_yes=False)
@@ -318,7 +343,7 @@ def run_preprocessing_interactive() -> int:
 def run_crawler_interactive() -> int:
     """Run crawler either in background mode or foreground stage mode."""
     choice = ask_yes_no_or_nav(ui.PROMPT_RUN_CRAWLER_BACKGROUND, default_yes=False)
-    if choice in {"back", "home"}:
+    if choice in ui.HOME_COMMANDS:
         return 0
     if choice:
         run_crawler_background()
@@ -351,8 +376,12 @@ def choose_preprocessed_docs_file() -> Path | None:
 
 def run_indexing_interactive() -> int:
     """Run indexing using an interactively selected preprocessed docs file."""
+    print(ui.DIVIDER)
+    print("INDEXING")
+    print(ui.DIVIDER)
     print(ui.INDEXING_EXPECTS_LINE)
     print(ui.INDEXING_USE_AFTER_PREPROCESS_LINE)
+    print(ui.DIVIDER)
     input_path = choose_preprocessed_docs_file()
     if input_path is None:
         return 0
@@ -379,7 +408,7 @@ def run_retrieval_interactive() -> int:
     if not index_files:
         print(ui.NO_INDEX_FILES_FOUND)
         build_now = ask_yes_no_or_nav(ui.PROMPT_BUILD_INDEX_NOW, default_yes=True)
-        if build_now in {"back", "home"}:
+        if build_now in ui.HOME_COMMANDS:
             return 0
         if build_now:
             rc = run_indexing_interactive()
@@ -399,12 +428,15 @@ def run_retrieval_interactive() -> int:
                 break
 
     selected = choose_from_list(ui.TITLE_CHOOSE_INDEX_FILE, [str(p.relative_to(ROOT)) for p in index_files], default_idx)
-    if selected in {"back", "home"}:
+    if selected in ui.HOME_COMMANDS:
         return 0
     selected_path = ROOT / selected
     pipeline_name = selected_path.stem.removeprefix("inverted_index_") or "baseline"
 
-    return run_interactive_query_loop(str(selected_path), pipeline=pipeline_name)
+    rc = run_interactive_query_loop(str(selected_path), pipeline=pipeline_name)
+    if rc == 2:
+        raise AppExitRequested()
+    return rc
 
 
 def interactive_mode() -> int:
@@ -421,8 +453,11 @@ def interactive_mode() -> int:
 
             choice = ask_input(ui.PROMPT_MAIN_CHOOSE, ui.PROMPT_MAIN_DEFAULT)
 
-            if choice == "0":
+            if _is_exit_command(choice):
+                print(ui.APP_GOODBYE)
                 return 0
+            if choice.lower() in ui.HOME_COMMANDS:
+                continue
             if choice == "1":
                 run_crawler_interactive()
                 continue
@@ -437,6 +472,10 @@ def interactive_mode() -> int:
                 continue
 
             print(ui.INVALID_MENU_OPTION)
+        except AppExitRequested:
+            print(ui.APP_GOODBYE)
+            return 0
         except KeyboardInterrupt:
             print(ui.INTERRUPTED_EXIT)
+            print(ui.APP_GOODBYE)
             return 0
