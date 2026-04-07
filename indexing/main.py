@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app_config import INDEX_DIR, PREPROCESSED_DIR
@@ -64,6 +66,9 @@ def run_indexing_stage(
     output_path: str | Path | None = None,
 ) -> int:
     """Build and save an inverted index for preprocessed documents."""
+    run_start = time.perf_counter()
+    run_started_at = datetime.now(timezone.utc)
+
     input_path = Path(input_path) if input_path else PREPROCESSED_DIR / f"docs_{pipeline}.jsonl"
     output_path = Path(output_path) if output_path else INDEX_DIR / f"inverted_index_{pipeline}.json"
 
@@ -87,8 +92,39 @@ def run_indexing_stage(
     with output_path.open("w", encoding="utf-8") as file_handle:
         json.dump(payload, file_handle, ensure_ascii=False)
 
+    run_duration = time.perf_counter() - run_start
+    metadata_path = output_path.parent / f"index_artifacts_{run_started_at.strftime('%Y%m%d_%H%M%S')}.json"
+    input_size_bytes = input_path.stat().st_size if input_path.exists() else None
+    index_size_bytes = output_path.stat().st_size if output_path.exists() else None
+    metadata_payload = {
+        "meta": {
+            "created_at_utc": run_started_at.isoformat(),
+            "duration_seconds": round(run_duration, 3),
+            "pipeline": pipeline,
+            "input_path": str(input_path),
+            "output_path": str(output_path),
+            "input_size_bytes": input_size_bytes,
+            "index_size_bytes": index_size_bytes,
+            "doc_count": len(documents),
+            "term_count": len(index.postings),
+            "documents_sha256": payload["meta"]["documents_sha256"],
+        },
+        "artifacts": {
+            "index": str(output_path),
+        },
+    }
+    with metadata_path.open("w", encoding="utf-8") as file_handle:
+        json.dump(metadata_payload, file_handle, ensure_ascii=False, indent=2)
+
+    metadata_size_bytes = metadata_path.stat().st_size if metadata_path.exists() else None
+    if metadata_size_bytes is not None:
+        metadata_payload["meta"]["metadata_size_bytes"] = metadata_size_bytes
+        with metadata_path.open("w", encoding="utf-8") as file_handle:
+            json.dump(metadata_payload, file_handle, ensure_ascii=False, indent=2)
+
     print(f"[indexing] docs={len(documents)} terms={len(index.postings)}")
     print(f"[indexing] wrote {output_path}")
+    print(f"[indexing] wrote {metadata_path}")
     return 0
 
 
