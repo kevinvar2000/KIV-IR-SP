@@ -64,6 +64,12 @@ Interactive retrieval lets you choose a persisted index and then a method:
 
 Boolean mode now uses the real indexed term space (from persisted index postings), not placeholder text.
 
+Standalone Boolean CLI also supports reading queries from a plain text file (one query per line):
+
+```bash
+python -m retrieval.boolean_search path/to/collection.txt --query-file path/to/boolean_queries.txt
+```
+
 ## Query Preprocessing Consistency
 
 Query preprocessing is aligned with the index pipeline:

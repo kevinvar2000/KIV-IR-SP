@@ -1,107 +1,140 @@
-# Compliance Gap Analysis and Improvement Plan
+# Compliance Gap Analysis (Standardni zadani)
 
 ## Scope
-This document compares the current implementation against the final compliance checklist (retrieval correctness, UI behavior, and performance/readiness).
+This checklist is re-evaluated against the current repository state and your mandatory baseline target (20 points).
 
-## Executive Summary
-Current system is functional, but there are still important compliance gaps that can cost significant points:
-1. Boolean query parsing should be documented more clearly for maintainability.
-2. Debug output still needs a final polish pass for clean submission runs.
-3. The performance/readiness story still needs a concise benchmark note for indexing and search.
-
-High-risk gaps are now centered on output polish and documentation clarity.
+## Executive Verdict
+- Current status: Baseline-compliant in the repository implementation.
+- Main remaining dependency: External `trec_eval` binary/environment for producing the official MAP report at evaluation time.
+- Strengths: Custom TF-IDF/Boolean implementations, persisted index files, language-aware preprocessing, model toggle in interactive retrieval, evaluation runner with TREC export.
 
 ---
 
-## Stage 2: Vector Space Model
+## 1. Preprocessing & Indexing (Mandatory)
+- [x] Custom Indexer
+Evidence: `retrieval/tfidf.py` implements `InvertedIndex` and indexing logic in project code; no Lucene/Elasticsearch usage.
 
-### Current State
-- Log TF implemented as `1 + log10(tf)`.
-- Cosine similarity implemented with normalized vectors.
-- Document norms are precomputed during indexing and reused in search.
+- [x] Linguistic Pipeline
+Evidence: `preprocessing/config.py` + `preprocessing/preprocess.py` include stopword removal and stemming/lemmatization.
 
-### Flaws / Missing Items
-1. No explicit regression test that checks score reproducibility against expected values.
-2. No quality gate for target MAP (for example MAP >= 0.2) tied to evaluation run.
+- [x] Diacritics Policy
+Evidence: In `preprocessing/config.py`, `baseline` keeps diacritics, `*_no_diacritics` applies `RemoveDiacriticsPreprocessor()` after stemming/lemmatization.
 
-### Improvement Actions
-1. Add deterministic scoring tests for a tiny synthetic corpus.
-2. Add evaluation summary step that computes MAP and fails if threshold not met.
-3. Freeze index/query preprocessing params in evaluation mode to avoid accidental drift.
+- [x] In-Memory Store
+Evidence: `InvertedIndex` is built/loaded into Python memory structures (`dict`) and queried in RAM (`retrieval/tfidf.py`, `retrieval/boolean.py`).
 
-Priority: Medium
+- [x] Format Compatibility
+Evidence: `preprocessing/dataset.py::load_records()` supports JSON and JSONL, including crawler-produced JSONL records.
 
----
-
-## Stage 4: UI/UX and Output Contract
-
-### Current State
-- Interactive index selection exists.
-- Interactive model selection exists.
-
-### Flaws / Missing Items
-1. The query UI still has a compact terminal-oriented presentation and could be made more explicit for evaluation mode.
-2. Boolean debug output is still developer-oriented and should be behind a debug flag for polished submission runs.
-
-### Improvement Actions
-1. Keep the current per-query model toggle.
-2. Gate debug output behind a flag so the console stays readable.
-3. Preserve the current table output for interactive exploration.
-
-Priority: High
+Section result: PASS
 
 ---
 
-## Stage 5: Documentation and Technical Explainability
+## 2. Vector Space Model (Mandatory)
+- [x] TF-IDF Calculation
+Evidence: `retrieval/tfidf.py::weighted_tf()` uses `1 + log10(tf)` and IDF uses `log10(N/df)`.
 
-### Current State
-- User-facing README exists.
-- Technical workflow document exists.
+- [x] Cosine Similarity
+Evidence: `retrieval/tfidf.py::cosine_similarity()` computes normalized dot product.
 
-### Flaws / Missing Items
-1. No programmer-facing parser design notes for the Boolean query parser.
+- [x] Top-X Ranking
+Evidence: `retrieval/tfidf.py::search()` sorts by descending score (`scored.sort(key=lambda x: (-x[1], x[0]))`).
 
-### Improvement Actions
-1. Add a short parser design section describing operator precedence and postfix evaluation.
-2. Keep the evaluation runbook in sync with the exporter if the output contract changes.
-
-Priority: Medium
+Section result: PASS
 
 ---
 
-## Stage 6: Performance and Readiness Checks
+## 3. Boolean Model & Parentheses (Mandatory)
+- [x] Operators AND/OR/NOT
+Evidence: `retrieval/boolean.py` supports all three operators.
 
-### Current State
-- TF-IDF implementation precomputes document norms during indexing.
-- Candidate filtering via postings is in place for search.
+- [x] Parentheses Priority
+Evidence: `retrieval/boolean.py` converts infix to postfix and validates parentheses.
 
-### Flaws / Missing Items
-1. No explicit benchmark threshold has been committed for indexing/search timing.
-2. No automated check for full corpus search completion time.
+- [x] Shunting-yard Algorithm (Recommended)
+Evidence: `retrieval/boolean.py::_infix_to_postfix()` uses operator stack/precedence/associativity.
 
-### Improvement Actions
-1. Add benchmark utility:
-   - indexing duration
-   - average query latency
-   - p95 query latency
-2. Add CI/local guard for indexing/search runtime budget.
+- [x] Model Toggle
+Evidence: `retrieval/query_interface.py::_ask_search_method()` toggles TF-IDF vs Boolean before querying.
 
-Priority: Medium
+Section result: PASS
 
 ---
 
-## Recommended Implementation Order
+## 4. Evaluation Engine (Mandatory)
+- [x] TREC Format Exporter (`qid iter docno rank sim run_id`)
+Evidence: `eval_interface/evaluate.py::evaluate_ranked()` writes 6-column TREC run files.
 
-1. Boolean parser correctness (parentheses + precedence + postfix evaluator).
-2. Exact output contract (`Total documents found: X`, per-query model toggle).
-3. Documentation update with final command references.
+- [x] Batch Processing of queries JSON to TREC output
+Evidence: `eval_interface/evaluate.py::main()` loads `documents.json` and `full_text_queries.json`, runs all queries, and writes run files in one batch.
+
+- [x] Performance Threshold Validation
+Evidence: generated summary for `eval_data_en` shows indexing 10.656s and ranked batch search 8.567s, both below thresholds.
+
+Section result: PASS
 
 ---
 
-## Definition of Done (Submission-Oriented)
+## 5. Extra Credit (Nadstandardni funkcnost)
+- [x] File-based Index
+Evidence: Index is persisted and reloaded (`indexing/main.py`, `retrieval/tfidf.py::save_json/load_json`).
 
-The system is submission-ready when all are true:
-1. Boolean queries with parentheses evaluate correctly.
-2. Every query run prints `Total documents found: X`.
-3. Retrieval results are reproducible for the selected index and pipeline.
-4. README + technical docs include exact usage commands for crawler, preprocessing, indexing, and retrieval.
+- [~] Highlighting (KWIC)
+Status: Partial
+Evidence: `retrieval/query_interface.py` prints highlighted debug snippets (`[[term]]`), but behavior is debug-like and not a clean dedicated KWIC result mode.
+
+- [ ] Language Detection (Automatic)
+Gap: Language is selected/resolved by pipeline metadata, not auto-detected from text/query.
+
+- [x] Custom Parser
+Evidence: Boolean parser is implemented in-house in `retrieval/boolean.py` (no parser libraries like `ply`/`pyparsing`).
+
+Section result: Partial
+
+---
+
+## 6. Submission Artifacts
+- [x] README.txt / run instructions
+Evidence: `README.md` includes install/run workflow and project structure.
+
+- [ ] PDF Documentation with evaluation results (MAP)
+Gap: No PDF artifact in repository and no MAP report generation currently.
+
+- [ ] Data Link on gapps.zcu.cz
+Gap: Cannot be verified from repository.
+
+- [ ] ZIP name `JmenoPRIJMENI.zip`
+Gap: Packaging step not represented in repository.
+
+Section result: Incomplete
+
+---
+
+## Critical Boolean Test (XOR-style)
+Suggested manual verification:
+1. Query `A AND B`
+2. Query `A OR B`
+3. Query `(A OR B) AND NOT (A AND B)`
+
+Expected: step 3 returns docs containing exactly one term.
+
+Implementation confidence: High (based on postfix evaluation and operator precedence in `retrieval/boolean.py`).
+
+---
+
+## Baseline 20-Point Readiness
+Mandatory sections passed:
+- Section 1: PASS
+- Section 2: PASS
+- Section 3: PASS
+
+- Section 4: PASS
+
+Conclusion: Repository implementation now meets the mandatory baseline checklist.
+
+---
+
+## Fastest Path to Compliance
+1. Install or point to the official `trec_eval` binary and run the evaluator on the target dataset.
+2. Save the resulting MAP/P@10 summary into the final PDF submission artifact.
+3. Package the repository with the evaluation outputs included.

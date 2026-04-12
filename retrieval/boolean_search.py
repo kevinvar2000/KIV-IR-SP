@@ -18,7 +18,21 @@ def resolve_input_files(input_files: list[str]) -> list[Path]:
     return [path for path in files if path.exists()]
 
 
-def run_collection(file_path: str | Path) -> None:
+def load_queries_from_file(query_file: str | Path) -> list[tuple[str, str]]:
+    """Load Boolean queries from plain text file, one query per non-empty line."""
+    path = Path(query_file)
+    queries: list[tuple[str, str]] = []
+
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        query_text = line.strip()
+        if not query_text:
+            continue
+        queries.append((f"q{line_number}", query_text))
+
+    return queries
+
+
+def run_collection(file_path: str | Path, query_rows: list[tuple[str, str]] | None = None) -> None:
     """Run Boolean retrieval for all queries in one collection file."""
     parser = CollectionParser()
     preprocessor = Preprocessor()
@@ -29,7 +43,12 @@ def run_collection(file_path: str | Path) -> None:
     scorer = BooleanScorer(index, preprocessor)
 
     print(f"\n=== {collection.name} (Boolean) ===")
-    for query_id, query_text in collection.queries.items():
+    queries = query_rows if query_rows is not None else list(collection.queries.items())
+    if not queries:
+        print("No queries found. Provide q-lines in collection file or use --query-file.")
+        return
+
+    for query_id, query_text in queries:
         ranked = scorer.search(query_text)
         print(f"\n{query_id}: {query_text}")
         print("Ranking")
@@ -51,7 +70,22 @@ def main() -> int:
         nargs="*",
         help="Input collection files. If omitted, tries retrieval/test1.txt and retrieval/test2.txt.",
     )
+    parser.add_argument(
+        "--query-file",
+        help="Path to text file with one Boolean query per line.",
+    )
     args = parser.parse_args()
+
+    query_rows: list[tuple[str, str]] | None = None
+    if args.query_file:
+        query_path = Path(args.query_file)
+        if not query_path.exists():
+            print(f"Query file not found: {query_path}")
+            return 1
+        query_rows = load_queries_from_file(query_path)
+        if not query_rows:
+            print(f"No non-empty queries found in: {query_path}")
+            return 1
 
     existing_files = resolve_input_files(args.files)
     if not existing_files:
@@ -60,7 +94,7 @@ def main() -> int:
         return 0
 
     for file_path in existing_files:
-        run_collection(file_path)
+        run_collection(file_path, query_rows=query_rows)
     return 0
 
 

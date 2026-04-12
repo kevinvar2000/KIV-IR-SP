@@ -365,6 +365,20 @@ def list_preprocessed_docs_files() -> list[Path]:
     return sorted(path for path in PREPROCESSED_DIR.glob("docs_*.jsonl") if path.is_file())
 
 
+def _format_file_size(size_bytes: int) -> str:
+    """Format bytes into compact human-readable units."""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(size_bytes)
+    unit_index = 0
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+
+    if unit_index == 0:
+        return f"{int(size)} {units[unit_index]}"
+    return f"{size:.1f} {units[unit_index]}"
+
+
 def choose_preprocessed_docs_file() -> Path | None:
     """Choose or manually enter a preprocessed docs file for indexing."""
     return _choose_file_from_menu(
@@ -427,10 +441,21 @@ def run_retrieval_interactive() -> int:
                 default_idx = idx
                 break
 
-    selected = choose_from_list(ui.TITLE_CHOOSE_INDEX_FILE, [str(p.relative_to(ROOT)) for p in index_files], default_idx)
+    option_map: dict[str, Path] = {}
+    menu_options: list[str] = []
+    for path in index_files:
+        try:
+            size_label = _format_file_size(path.stat().st_size)
+        except OSError:
+            size_label = "size unavailable"
+        menu_label = f"{path.relative_to(ROOT)} ({size_label})"
+        option_map[menu_label] = path
+        menu_options.append(menu_label)
+
+    selected = choose_from_list(ui.TITLE_CHOOSE_INDEX_FILE, menu_options, default_idx)
     if selected in ui.HOME_COMMANDS:
         return 0
-    selected_path = ROOT / selected
+    selected_path = option_map[selected]
     pipeline_name = selected_path.stem.removeprefix("inverted_index_") or "baseline"
 
     rc = run_interactive_query_loop(str(selected_path), pipeline=pipeline_name)

@@ -13,9 +13,47 @@ from .tfidf import CosineScorer, InvertedIndex
 from .boolean import BooleanIndex, BooleanScorer
 from .dataset import Preprocessor
 
+
+def _format_file_size(size_bytes: int) -> str:
+    """Format bytes into compact human-readable units."""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(size_bytes)
+    unit_index = 0
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+
+    if unit_index == 0:
+        return f"{int(size)} {units[unit_index]}"
+    return f"{size:.1f} {units[unit_index]}"
+
 def _is_nav_or_exit_command(value: str) -> bool:
     """Return True when input requests leaving the current interactive loop."""
     return value.strip().lower() in ui.NAV_OR_EXIT_COMMANDS
+
+
+def _load_query_file_rows(file_path: str | Path) -> list[tuple[str, str]]:
+    """Load non-empty query lines from a text file with stable line-based IDs."""
+    path = Path(file_path)
+    rows: list[tuple[str, str]] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        query_text = line.strip()
+        if not query_text:
+            continue
+        rows.append((f"q{line_number}", query_text))
+    return rows
+
+
+def _parse_query_file_command(raw_query: str) -> Path | None:
+    """Parse file command in form file:<path> and return query file path."""
+    lowered = raw_query.lower()
+    if not lowered.startswith("file:"):
+        return None
+
+    path_text = raw_query[5:].strip()
+    if not path_text:
+        raise ValueError(ui.QUERY_FILE_USAGE_HINT)
+    return Path(path_text)
 
 
 class PipelineQueryPreprocessor:
@@ -278,7 +316,13 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
         print(ui.QUERY_LOAD_INDEX_ERROR.format(error=e))
         return 1
     
+    try:
+        index_size = _format_file_size(index_path.stat().st_size)
+    except OSError:
+        index_size = "size unavailable"
+
     print(ui.QUERY_LOADED_INDEX.format(name=index_path.name))
+    print(ui.QUERY_FILE_SIZE.format(size=index_size))
     print(ui.QUERY_PIPELINE.format(pipeline=resolved_pipeline))
     print(ui.QUERY_DOCS_TERMS.format(docs=tfidf_index.num_docs, terms=len(tfidf_index.postings)))
     if metadata:
@@ -304,8 +348,13 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
         print(ui.QUERY_INTERFACE_RETURNING)
         return 0
 
+    print(ui.DIVIDER)
     print(ui.QUERY_INTERFACE_SELECTED_METHOD.format(method=search_method))
-    
+    if search_method == "boolean":
+        print(ui.DIVIDER)
+        print(ui.QUERY_BOOLEAN_FILE_HINT)
+
+    print(ui.DIVIDER)
     while True:
         try:
             query = input(ui.PROMPT_ENTER_QUERY).strip()
@@ -317,27 +366,42 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
                 print(ui.QUERY_INTERFACE_RETURNING)
                 return 0
 
-            print(ui.QUERY_SEARCHING.format(query=query))
-            
-            if search_method == "tfidf":
-                ranked = tfidf_scorer.search(query)
-                print(ui.QUERY_TOTAL_FOUND.format(count=len(ranked)))
-                print(ui.QUERY_RESULTS_FOUND.format(count=len(ranked)))
-            else:  # boolean
-                ranked = boolean_scorer.search(query)
-                debug_data = boolean_scorer.last_debug
-                print(ui.QUERY_TOTAL_FOUND.format(count=len(ranked)))
-                print(ui.QUERY_RESULTS_FOUND.format(count=len(ranked)))
-                print(f"[debug][boolean] infix={debug_data.get('infix_tokens', [])}")
-                print(f"[debug][boolean] postfix={debug_data.get('postfix_tokens', [])}")
-            
-            print(_format_results(ranked, search_method, metadata, max_display=10))
-            _print_debug_hits(
-                ranked=ranked,
-                query=query,
-                query_preprocessor=query_preprocessor,
-                doc_texts=debug_doc_texts,
-            )
+            query_rows: list[tuple[str, str]] = [("q", query)]
+            if search_method == "boolean":
+                query_file = _parse_query_file_command(query)
+                if query_file is not None:
+                    if not query_file.exists() or not query_file.is_file():
+                        print(ui.QUERY_FILE_NOT_FOUND.format(path=query_file))
+                        continue
+                    query_rows = _load_query_file_rows(query_file)
+                    if not query_rows:
+                        print(ui.QUERY_FILE_EMPTY.format(path=query_file))
+                        continue
+                    print(ui.QUERY_FILE_LOADED.format(path=query_file, count=len(query_rows)))
+
+            for query_id, query_text in query_rows:
+                print(ui.QUERY_SEARCHING.format(query=query_text))
+
+                if search_method == "tfidf":
+                    ranked = tfidf_scorer.search(query_text)
+                    print(ui.QUERY_TOTAL_FOUND.format(count=len(ranked)))
+                    print(ui.QUERY_RESULTS_FOUND.format(count=len(ranked)))
+                else:  # boolean
+                    ranked = boolean_scorer.search(query_text)
+                    debug_data = boolean_scorer.last_debug
+                    print(ui.QUERY_TOTAL_FOUND.format(count=len(ranked)))
+                    print(ui.QUERY_RESULTS_FOUND.format(count=len(ranked)))
+                    print(f"[debug][boolean] query={query_id}")
+                    print(f"[debug][boolean] infix={debug_data.get('infix_tokens', [])}")
+                    print(f"[debug][boolean] postfix={debug_data.get('postfix_tokens', [])}")
+
+                print(_format_results(ranked, search_method, metadata, max_display=10))
+                _print_debug_hits(
+                    ranked=ranked,
+                    query=query_text,
+                    query_preprocessor=query_preprocessor,
+                    doc_texts=debug_doc_texts,
+                )
         
         except KeyboardInterrupt:
             print(ui.QUERY_INTERRUPTED)
