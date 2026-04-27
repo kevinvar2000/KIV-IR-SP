@@ -292,6 +292,44 @@ def choose_pipelines(language: str) -> list[str]:
         print(ui.INVALID_CHOICE)
 
 
+def choose_text_keys_interactive(text_keys: list[str], default_key: str) -> list[str] | None:
+    """Choose one or more text keys using comma-separated menu indices."""
+    print(f"\n{ui.TITLE_DETECTED_TEXT_KEYS}")
+    print(ui.DIVIDER)
+    for idx, key in enumerate(text_keys, start=1):
+        print(f"{idx}. {key}")
+    print(ui.DIVIDER)
+
+    default_index = text_keys.index(default_key) + 1
+    while True:
+        raw = ask_input(ui.PROMPT_CHOOSE_TEXT_KEYS, str(default_index))
+        lowered = raw.lower()
+        if _is_exit_command(lowered):
+            raise AppExitRequested()
+        if lowered in ui.HOME_COMMANDS:
+            return None
+
+        parts = [part.strip() for part in raw.split(",") if part.strip()]
+        if not parts:
+            return [default_key]
+
+        chosen: list[str] = []
+        for part in parts:
+            try:
+                idx = int(part)
+            except ValueError:
+                continue
+            if 1 <= idx <= len(text_keys):
+                value = text_keys[idx - 1]
+                if value not in chosen:
+                    chosen.append(value)
+
+        if chosen:
+            return chosen
+
+        print(ui.INVALID_CHOICE)
+
+
 def run_preprocessing_interactive() -> int:
     """Run interactive preprocessing flow and trigger selected pipelines."""
     print(ui.DIVIDER)
@@ -308,16 +346,20 @@ def run_preprocessing_interactive() -> int:
     text_keys = detect_text_keys(input_path)
     if not text_keys:
         print(ui.ERROR_COULD_NOT_DETECT_TEXT_KEYS.format(path=input_path))
-        text_key = ask_input(ui.PROMPT_ENTER_TEXT_KEY, "article_text")
-        if _is_exit_command(text_key):
+        text_key_raw = ask_input(ui.PROMPT_ENTER_TEXT_KEY, "article_text")
+        if _is_exit_command(text_key_raw):
             raise AppExitRequested()
-        if text_key.lower() in ui.HOME_COMMANDS:
+        if text_key_raw.lower() in ui.HOME_COMMANDS:
             return 0
+        text_key = [part.strip() for part in text_key_raw.split(",") if part.strip()]
+        if not text_key:
+            text_key = ["article_text"]
     else:
         default_key = "article_text" if "article_text" in text_keys else text_keys[0]
-        text_key = choose_from_list(ui.TITLE_DETECTED_TEXT_KEYS, text_keys, text_keys.index(default_key) + 1)
-        if text_key in ui.HOME_COMMANDS:
+        selected_keys = choose_text_keys_interactive(text_keys, default_key)
+        if selected_keys is None:
             return 0
+        text_key = selected_keys
 
     pipelines = choose_pipelines(language)
     if len(pipelines) == 1 and pipelines[0] in ui.HOME_COMMANDS:

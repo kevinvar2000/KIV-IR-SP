@@ -56,6 +56,180 @@ def _parse_query_file_command(raw_query: str) -> Path | None:
     return Path(path_text)
 
 
+def _safe_resolve(path_value: str | Path) -> Path:
+    """Resolve path safely for cross-file metadata matching."""
+    try:
+        return Path(path_value).resolve()
+    except OSError:
+        return Path(path_value)
+
+
+def _load_doc_texts_from_preprocessed_docs(preprocessed_docs_path: Path) -> dict[str, str]:
+    """Load debug text snippets keyed by doc_id from preprocessed JSONL docs."""
+    doc_texts: dict[str, str] = {}
+    if not preprocessed_docs_path.exists() or not preprocessed_docs_path.is_file():
+        return doc_texts
+
+    with preprocessed_docs_path.open("r", encoding="utf-8") as file_handle:
+        for line in file_handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                record = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict):
+                continue
+
+            doc_id = str(record.get("doc_id") or "").strip()
+            if not doc_id:
+                continue
+
+            text_value = record.get("text")
+            if not isinstance(text_value, str) or not text_value.strip():
+                text_value = record.get("normalized_text")
+
+            if isinstance(text_value, str) and text_value.strip():
+                doc_texts[doc_id] = text_value
+
+    return doc_texts
+
+
+def _load_records_from_json_or_jsonl(input_path: Path) -> list[dict]:
+    """Load records from JSON array/object or JSONL file."""
+    if not input_path.exists() or not input_path.is_file():
+        return []
+
+    def _load_jsonl() -> list[dict]:
+        rows: list[dict] = []
+        with input_path.open("r", encoding="utf-8") as file_handle:
+            for line in file_handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    row = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(row, dict):
+                    rows.append(row)
+        return rows
+
+    if input_path.suffix.lower() == ".jsonl":
+        return _load_jsonl()
+
+    try:
+        with input_path.open("r", encoding="utf-8") as file_handle:
+            loaded = json.load(file_handle)
+    except json.JSONDecodeError:
+        return _load_jsonl()
+    except OSError:
+        return []
+
+    if isinstance(loaded, list):
+        return [row for row in loaded if isinstance(row, dict)]
+    if isinstance(loaded, dict):
+        return [loaded]
+    return []
+
+
+def _load_metadata_and_texts_from_input(
+    input_path: Path,
+    text_keys: list[str] | None = None,
+) -> tuple[dict[str, dict], dict[str, str]]:
+    """Load metadata and optional text snippets from preprocessing input records."""
+    rows = _load_records_from_json_or_jsonl(input_path)
+    metadata_map: dict[str, dict] = {}
+    doc_texts: dict[str, str] = {}
+    selected_text_keys = [key for key in (text_keys or []) if key]
+    title_candidates = ("title", "headline", "name")
+
+    for idx, row in enumerate(rows, start=1):
+        doc_id_raw = row.get("doc_id") or row.get("id") or row.get("url") or f"doc_{idx}"
+        doc_id = str(doc_id_raw).strip()
+        if not doc_id:
+            continue
+
+        url_value = row.get("url")
+        url = str(url_value).strip() if isinstance(url_value, str) else ""
+
+        title = "Unknown"
+        for key in title_candidates:
+            value = row.get(key)
+            if isinstance(value, str) and value.strip():
+                title = value.strip()
+                break
+
+        metadata_entry = {"title": title}
+        if url:
+            metadata_entry["url"] = url
+        metadata_map[doc_id] = metadata_entry
+        if url:
+            metadata_map[url] = metadata_entry
+
+        text_parts: list[str] = []
+        for key in selected_text_keys:
+            value = row.get(key)
+            if isinstance(value, str) and value.strip():
+                text_parts.append(value.strip())
+        if text_parts:
+            doc_texts[doc_id] = "\n\n".join(text_parts)
+
+    return metadata_map, doc_texts
+
+
+def _load_preprocessing_context(source_docs_path: Path) -> dict[str, object] | None:
+    """Find preprocessing artifact metadata for a given preprocessed docs file."""
+    preprocessed_dir = source_docs_path.parent
+    if not preprocessed_dir.exists() or not preprocessed_dir.is_dir():
+        return None
+
+    source_resolved = _safe_resolve(source_docs_path)
+    for artifact_path in sorted(preprocessed_dir.glob("artifacts_index_*.json"), reverse=True):
+        try:
+            with artifact_path.open("r", encoding="utf-8") as file_handle:
+                payload = json.load(file_handle)
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        if not isinstance(payload, dict):
+            continue
+        meta = payload.get("meta")
+        artifacts = payload.get("artifacts")
+        if not isinstance(meta, dict) or not isinstance(artifacts, dict):
+            continue
+
+        matched = False
+        for entry in artifacts.values():
+            if not isinstance(entry, dict):
+                continue
+            docs_path = entry.get("docs")
+            if not isinstance(docs_path, str):
+                continue
+            if _safe_resolve(docs_path) == source_resolved:
+                matched = True
+                break
+
+        if not matched:
+            continue
+
+        raw_text_keys = meta.get("text_keys")
+        text_keys: list[str] = []
+        if isinstance(raw_text_keys, list):
+            text_keys = [str(key) for key in raw_text_keys if str(key).strip()]
+        elif isinstance(meta.get("text_key"), str) and str(meta.get("text_key")).strip():
+            text_keys = [str(meta.get("text_key"))]
+
+        return {
+            "input_path": str(meta.get("input_path") or "").strip(),
+            "language": str(meta.get("language") or "").strip(),
+            "text_keys": text_keys,
+        }
+
+    return None
+
+
 class PipelineQueryPreprocessor:
     """Apply the same preprocessing pipeline to queries as used for index generation."""
 
@@ -276,6 +450,8 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     debug_doc_texts: dict[str, str] = dict(doc_texts or {})
     root = Path(__file__).resolve().parent.parent
     crawler_data_path = root / "data" / "crawler" / "crawled_pages.json"
+    preprocessing_context: dict[str, object] | None = None
+    indexed_source_docs_path: Path | None = None
     
     if crawler_data_path.exists():
         try:
@@ -312,9 +488,31 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
         
         tfidf_index = InvertedIndex.from_dict(index_data)
         resolved_pipeline = str(meta.get("pipeline") or pipeline)
+        source_file_raw = str(meta.get("source_file") or "").strip()
+        if source_file_raw:
+            indexed_source_docs_path = _safe_resolve(source_file_raw)
     except Exception as e:
         print(ui.QUERY_LOAD_INDEX_ERROR.format(error=e))
         return 1
+
+    if indexed_source_docs_path is not None:
+        preprocessing_context = _load_preprocessing_context(indexed_source_docs_path)
+
+        # Always merge doc_id keyed texts from indexed docs so snippet lookup for dNNNN works.
+        debug_doc_texts.update(_load_doc_texts_from_preprocessed_docs(indexed_source_docs_path))
+
+    if preprocessing_context:
+        source_input = str(preprocessing_context.get("input_path") or "").strip()
+        text_keys_raw = preprocessing_context.get("text_keys")
+        selected_text_keys = text_keys_raw if isinstance(text_keys_raw, list) else []
+        if source_input:
+            input_metadata, input_doc_texts = _load_metadata_and_texts_from_input(
+                _safe_resolve(source_input),
+                selected_text_keys,
+            )
+            for key, value in input_metadata.items():
+                metadata.setdefault(key, value)
+            debug_doc_texts.update(input_doc_texts)
     
     try:
         index_size = _format_file_size(index_path.stat().st_size)
@@ -325,8 +523,24 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     print(ui.QUERY_FILE_SIZE.format(size=index_size))
     print(ui.QUERY_PIPELINE.format(pipeline=resolved_pipeline))
     print(ui.QUERY_DOCS_TERMS.format(docs=tfidf_index.num_docs, terms=len(tfidf_index.postings)))
+    if indexed_source_docs_path is not None:
+        print(ui.QUERY_INDEX_SOURCE.format(path=indexed_source_docs_path))
+    if preprocessing_context:
+        source_input = str(preprocessing_context.get("input_path") or "").strip()
+        language = str(preprocessing_context.get("language") or "").strip()
+        text_keys = preprocessing_context.get("text_keys")
+
+        if source_input:
+            print(ui.QUERY_PREPROCESS_SOURCE.format(path=source_input))
+        if language:
+            print(ui.QUERY_PREPROCESS_LANGUAGE.format(language=language))
+        if isinstance(text_keys, list) and text_keys:
+            print(ui.QUERY_PREPROCESS_TEXT_KEYS.format(keys=", ".join(text_keys)))
+
     if metadata:
         print(ui.QUERY_METADATA_COUNT.format(count=len(metadata)))
+    if debug_doc_texts:
+        print(ui.QUERY_DEBUG_TEXTS_LOADED.format(count=len(debug_doc_texts)))
     
     # Create preprocessors
     query_preprocessor = PipelineQueryPreprocessor(resolved_pipeline)
@@ -334,19 +548,19 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     boolean_scorer = BooleanScorer(boolean_index, query_preprocessor, debug=False)
     tfidf_scorer = CosineScorer(tfidf_index, query_preprocessor)
     
-    # Query loop
-    print("\n" + ui.DIVIDER)
-    print(ui.QUERY_INTERFACE_TITLE)
-    print(ui.DIVIDER)
-    print(ui.QUERY_INTERFACE_HELP)
-    print(ui.DIVIDER)
-
     search_method = _ask_search_method()
     if search_method == ui.APP_EXIT_SIGNAL:
         return ui.APP_EXIT_CODE
     if search_method is None:
         print(ui.QUERY_INTERFACE_RETURNING)
         return 0
+
+    # Query loop
+    print("\n" + ui.DIVIDER)
+    print(ui.QUERY_INTERFACE_TITLE)
+    print(ui.DIVIDER)
+    print(ui.QUERY_INTERFACE_HELP)
+    print(ui.DIVIDER)
 
     print(ui.DIVIDER)
     print(ui.QUERY_INTERFACE_SELECTED_METHOD.format(method=search_method))

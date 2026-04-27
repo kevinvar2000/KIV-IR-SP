@@ -98,8 +98,19 @@ class InvertedIndex:
                 self.weighted_tf,
             )
 
-    def to_dict(self) -> Dict[str, object]:
-        """Serialize the index to a plain JSON-compatible dictionary."""
+    def to_dict(self, compact: bool = False) -> Dict[str, object]:
+        """Serialize the index to a plain JSON-compatible dictionary.
+
+        Compact mode stores only structures required to reconstruct the rest.
+        """
+
+        if compact:
+            return {
+                "postings": self.postings,
+                "doc_freq": self.doc_freq,
+                "idf": self.idf,
+                "num_docs": self.num_docs,
+            }
 
         return {
             "postings": self.postings,
@@ -111,6 +122,60 @@ class InvertedIndex:
             "num_docs": self.num_docs,
         }
 
+    @staticmethod
+    def _rebuild_doc_term_freqs(postings: Dict[str, Dict[str, int]]) -> Dict[str, Dict[str, int]]:
+        """Rebuild doc -> term frequencies map from term -> doc postings."""
+        doc_term_freqs: Dict[str, Dict[str, int]] = {}
+        for term, docs in postings.items():
+            for doc_id, tf in docs.items():
+                if doc_id not in doc_term_freqs:
+                    doc_term_freqs[doc_id] = {}
+                doc_term_freqs[doc_id][term] = tf
+        return doc_term_freqs
+
+    @staticmethod
+    def _resolve_num_docs(
+        payload: Dict[str, object],
+        postings: Dict[str, Dict[str, int]],
+        doc_term_freqs: Dict[str, Dict[str, int]],
+    ) -> int:
+        """Resolve document count from payload or derived index structures."""
+        if "num_docs" in payload:
+            return int(payload.get("num_docs", 0))
+        if doc_term_freqs:
+            return len(doc_term_freqs)
+        doc_ids: set[str] = set()
+        for docs in postings.values():
+            doc_ids.update(docs.keys())
+        return len(doc_ids)
+
+    @classmethod
+    def _resolve_doc_freq(cls, payload: Dict[str, object], postings: Dict[str, Dict[str, int]]) -> Dict[str, int]:
+        """Resolve document frequencies from payload or derive from postings."""
+        raw = payload.get("doc_freq", {})
+        if isinstance(raw, dict) and raw:
+            return {str(term): int(df) for term, df in raw.items()}
+        return {term: len(docs) for term, docs in postings.items()}
+
+    @classmethod
+    def _resolve_idf(
+        cls,
+        payload: Dict[str, object],
+        doc_freq: Dict[str, int],
+        num_docs: int,
+    ) -> Dict[str, float]:
+        """Resolve IDF values from payload or derive from DF and N."""
+        raw = payload.get("idf", {})
+        if isinstance(raw, dict) and raw:
+            return {str(term): float(idf) for term, idf in raw.items()}
+
+        if num_docs <= 0:
+            return {term: 0.0 for term in doc_freq.keys()}
+        return {
+            term: (math.log10(num_docs / df) if df > 0 else 0.0)
+            for term, df in doc_freq.items()
+        }
+
     @classmethod
     def from_dict(cls, payload: Dict[str, object]) -> "InvertedIndex":
         """Construct an index from a dictionary produced by to_dict()."""
@@ -120,20 +185,39 @@ class InvertedIndex:
             str(term): {str(doc_id): int(tf) for doc_id, tf in docs.items()}
             for term, docs in dict(payload.get("postings", {})).items()
         }
-        index.doc_term_freqs = {
-            str(doc_id): {str(term): int(tf) for term, tf in terms.items()}
-            for doc_id, terms in dict(payload.get("doc_term_freqs", {})).items()
-        }
-        index.doc_freq = {str(term): int(df) for term, df in dict(payload.get("doc_freq", {})).items()}
-        index.idf = {str(term): float(idf) for term, idf in dict(payload.get("idf", {})).items()}
-        index.doc_vectors = {
-            str(doc_id): {str(term): float(weight) for term, weight in terms.items()}
-            for doc_id, terms in dict(payload.get("doc_vectors", {})).items()
-        }
-        index.doc_norms = {
-            str(doc_id): float(norm) for doc_id, norm in dict(payload.get("doc_norms", {})).items()
-        }
-        index.num_docs = int(payload.get("num_docs", 0))
+
+        raw_doc_term_freqs = payload.get("doc_term_freqs", {})
+        if isinstance(raw_doc_term_freqs, dict) and raw_doc_term_freqs:
+            index.doc_term_freqs = {
+                str(doc_id): {str(term): int(tf) for term, tf in terms.items()}
+                for doc_id, terms in raw_doc_term_freqs.items()
+            }
+        else:
+            index.doc_term_freqs = cls._rebuild_doc_term_freqs(index.postings)
+
+        index.num_docs = cls._resolve_num_docs(payload, index.postings, index.doc_term_freqs)
+        index.doc_freq = cls._resolve_doc_freq(payload, index.postings)
+        index.idf = cls._resolve_idf(payload, index.doc_freq, index.num_docs)
+
+        raw_doc_vectors = payload.get("doc_vectors", {})
+        raw_doc_norms = payload.get("doc_norms", {})
+        if isinstance(raw_doc_vectors, dict) and raw_doc_vectors and isinstance(raw_doc_norms, dict) and raw_doc_norms:
+            index.doc_vectors = {
+                str(doc_id): {str(term): float(weight) for term, weight in terms.items()}
+                for doc_id, terms in raw_doc_vectors.items()
+            }
+            index.doc_norms = {
+                str(doc_id): float(norm) for doc_id, norm in raw_doc_norms.items()
+            }
+        else:
+            index.doc_vectors = {}
+            index.doc_norms = {}
+            for doc_id, term_freqs in index.doc_term_freqs.items():
+                index.doc_vectors[doc_id], index.doc_norms[doc_id] = build_tfidf_vector(
+                    term_freqs,
+                    index.idf,
+                    index.weighted_tf,
+                )
         return index
 
     def save_json(self, file_path: str | Path) -> None:

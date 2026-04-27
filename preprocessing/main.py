@@ -17,7 +17,7 @@ def run_preprocessing_stage(
     *,
     input_path: str | Path = DEFAULT_INPUT,
     output_dir: str | Path,
-    text_key: str | None = None,
+    text_key: str | list[str] | None = None,
     pipeline_selection: list[str] | None = None,
     language: str = "cs",
     progress_every: int = 1000,
@@ -48,29 +48,41 @@ def run_preprocessing_stage(
             print("No text-like keys detected.")
         return 0
 
-    selected_key = text_key
-    if not selected_key:
-        if "article_text" in available_keys:
-            selected_key = "article_text"
-        elif "text" in available_keys:
-            selected_key = "text"
-        elif available_keys:
-            selected_key = available_keys[0]
+    selected_keys: list[str] = []
+    if isinstance(text_key, str):
+        selected_keys = [key.strip() for key in text_key.split(",") if key.strip()]
+    elif isinstance(text_key, list):
+        selected_keys = [str(key).strip() for key in text_key if str(key).strip()]
 
-    if not selected_key:
+    if not selected_keys:
+        if "article_text" in available_keys:
+            selected_keys = ["article_text"]
+        elif "text" in available_keys:
+            selected_keys = ["text"]
+        elif available_keys:
+            selected_keys = [available_keys[0]]
+
+    if not selected_keys:
         raise ValueError("Unable to determine text key automatically. Use --text-key.")
 
-    if available_keys and selected_key not in available_keys:
-        raise ValueError(
-            f"Selected text key '{selected_key}' not found among detected keys: {', '.join(available_keys)}"
-        )
+    if available_keys:
+        missing_keys = [key for key in selected_keys if key not in available_keys]
+        if missing_keys:
+            raise ValueError(
+                "Selected text keys not found among detected keys: "
+                + ", ".join(missing_keys)
+                + " | available: "
+                + ", ".join(available_keys)
+            )
 
-    raw_docs = normalize_docs(records, selected_key)
+    raw_docs = normalize_docs(records, selected_keys)
     print(f"Loaded {len(records)} rows from {input_path}")
-    print(f"Using key '{selected_key}' -> {len(raw_docs)} documents")
+    print(f"Using key(s) {selected_keys} -> {len(raw_docs)} documents")
 
     if not raw_docs:
-        raise ValueError("No non-empty documents found for selected text key.")
+        raise ValueError(
+            "No non-empty documents found for selected text key(s)."
+        )
 
     tokenizer = RegexMatchTokenizer()
     pipeline_map = build_pipelines(normalized_language)
@@ -153,7 +165,8 @@ def run_preprocessing_stage(
             "input_path": str(input_path),
             "output_dir": str(output_dir),
             "language": normalized_language,
-            "text_key": selected_key,
+            "text_key": selected_keys[0],
+            "text_keys": selected_keys,
             "pipeline_selection": selected_pipeline_names,
             "write_vocab": write_vocab,
             "skip_index": skip_index,

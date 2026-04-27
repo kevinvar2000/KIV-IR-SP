@@ -100,20 +100,31 @@ def detect_text_keys(records: list[dict], sample_limit: int = 200) -> list[str]:
     return [key for key, _ in sorted(key_score.items(), key=lambda x: (-x[1], x[0]))]
 
 
-def normalize_docs(records: list[dict], text_key: str) -> list[dict]:
-    """Normalize heterogeneous records into unified doc_id/url/text mapping."""
+def normalize_docs(records: list[dict], text_key: str | list[str]) -> list[dict]:
+    """Normalize records into unified doc_id/url/text mapping using one or more text keys."""
+    keys = [text_key] if isinstance(text_key, str) else [key for key in text_key if key]
+    if not keys:
+        return []
+
     docs: list[dict] = []
     for idx, row in enumerate(records, start=1):
         if not isinstance(row, dict):
             continue
-        value = row.get(text_key)
-        if isinstance(value, str) and value.strip():
+        parts: list[str] = []
+        for key in keys:
+            value = row.get(key)
+            if isinstance(value, str):
+                stripped = value.strip()
+                if stripped:
+                    parts.append(stripped)
+
+        if parts:
             doc_id = row.get("doc_id") or row.get("id") or row.get("url") or f"doc_{idx}"
             docs.append(
                 {
                     "doc_id": str(doc_id),
                     "url": row.get("url"),
-                    "text": value,
+                    "text": "\n\n".join(parts),
                 }
             )
     return docs

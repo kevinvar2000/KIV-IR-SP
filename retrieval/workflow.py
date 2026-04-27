@@ -64,8 +64,9 @@ def _save_index_cache(index_path: Path, source_path: Path, documents: dict[str, 
             "source_file": str(source_path),
             "doc_count": len(documents),
             "documents_sha256": _documents_fingerprint(documents),
+            "index_format": "compact-v2",
         },
-        "index": index.to_dict(),
+        "index": index.to_dict(compact=True),
     }
     with index_path.open("w", encoding="utf-8") as file_handle:
         json.dump(payload, file_handle, ensure_ascii=False)

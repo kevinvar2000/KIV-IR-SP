@@ -86,8 +86,9 @@ def run_indexing_stage(
             "source_file": str(input_path.resolve()),
             "doc_count": len(documents),
             "documents_sha256": documents_fingerprint(documents),
+            "index_format": "compact-v2",
         },
-        "index": index.to_dict(),
+        "index": index.to_dict(compact=True),
     }
     with output_path.open("w", encoding="utf-8") as file_handle:
         json.dump(payload, file_handle, ensure_ascii=False)
