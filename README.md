@@ -70,6 +70,78 @@ Standalone Boolean CLI also supports reading queries from a plain text file (one
 python -m retrieval.boolean_search path/to/collection.txt --query-file path/to/boolean_queries.txt
 ```
 
+## Inverted Index Format (Example)
+
+Persisted index files are stored in:
+- `data/index/inverted_index_<pipeline>[ _<lang> ].json`
+
+Current JSON structure is:
+
+```json
+{
+    "meta": {
+        "pipeline": "baseline",
+        "source_file": ".../data/preprocessed/docs_baseline.jsonl",
+        "doc_count": 81730,
+        "documents_sha256": "..."
+    },
+    "index": {
+        "postings": {
+            "term_a": {
+                "doc_1": 3,
+                "doc_25": 1
+            }
+        },
+        "doc_term_freqs": {
+            "doc_1": {
+                "term_a": 3,
+                "term_b": 2
+            }
+        },
+        "doc_freq": {
+            "term_a": 120
+        },
+        "idf": {
+            "term_a": 2.34567
+        },
+        "doc_vectors": {
+            "doc_1": {
+                "term_a": 4.12345,
+                "term_b": 2.00000
+            }
+        },
+        "doc_norms": {
+            "doc_1": 6.78901
+        },
+        "num_docs": 81730
+    }
+}
+```
+
+Note: New indexes are persisted in a compact format (`index_format=compact-v2`) to reduce file size.
+In compact mode, only core structures are stored (`postings`, `doc_freq`, `idf`, `num_docs`),
+and `doc_term_freqs` / `doc_vectors` / `doc_norms` are reconstructed on load.
+Older full-format indexes remain supported.
+
+Field types:
+- `meta`: `dict`
+- `meta.pipeline`: `str`
+- `meta.source_file`: `str`
+- `meta.doc_count`: `int`
+- `meta.documents_sha256`: `str`
+- `index.postings`: `dict[str, dict[str, int]]` (term -> doc_id -> raw TF)
+- `index.doc_term_freqs`: `dict[str, dict[str, int]]` (doc_id -> term -> raw TF)
+- `index.doc_freq`: `dict[str, int]` (term -> DF)
+- `index.idf`: `dict[str, float]` (term -> IDF)
+- `index.doc_vectors`: `dict[str, dict[str, float]]` (doc_id -> term -> TF-IDF weight)
+- `index.doc_norms`: `dict[str, float]` (doc_id -> L2 norm)
+- `index.num_docs`: `int`
+
+Size notes:
+- Index files can be large because both raw frequencies and TF-IDF vectors are persisted.
+- In this repository, `data/index/inverted_index_baseline.json` is currently around 664 MB on disk.
+- Interactive retrieval shows the selected index file size before query mode starts.
+
 ## Query Preprocessing Consistency
 
 Query preprocessing is aligned with the index pipeline:
