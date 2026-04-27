@@ -41,14 +41,10 @@ PIPELINE_TITLE = "\nAvailable preprocessing pipelines for {language}:"
 PIPELINE_LINE_1 = "1. baseline (lowercase, remove punct/tags/URLs, remove stopwords, min-length 2)"
 PIPELINE_LINE_2 = "2. stemming (baseline + language-aware stemming/lemmatization)"
 PIPELINE_LINE_3 = "3. lemmatization (baseline + language-aware lemmatization)"
-PIPELINE_LINE_4 = "4. stemming_no_diacritics (baseline + stemming + remove accents)"
-PIPELINE_LINE_5 = "5. lemmatization_no_diacritics (baseline + lemmatization + remove accents)"
 PIPELINE_LINES = [
 	PIPELINE_LINE_1,
 	PIPELINE_LINE_2,
 	PIPELINE_LINE_3,
-	PIPELINE_LINE_4,
-	PIPELINE_LINE_5,
 ]
 PIPELINE_ALL = "{all_index}. all (runs all pipelines and produces separate output files for each)"
 PIPELINE_NOTE = "\nNote: Stopwords, stemming, and lemmatization follow the selected language."

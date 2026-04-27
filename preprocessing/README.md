@@ -7,11 +7,9 @@ Simple preprocessing pipeline for Czech Information Retrieval experiments.
 - Loads documents from `eval_data_cs/documents.json`
 - Tokenizes text (words, numbers, dates, URLs, punctuation, tags)
 - Runs multiple preprocessing pipelines:
-  - baseline
-  - stemming
-  - lemmatization
-  - stemming_no_diacritics
-  - lemmatization_no_diacritics
+  - baseline (now always removes diacritics)
+  - stemming (baseline + stemming)
+  - lemmatization (baseline + lemmatization)
 - Builds vocabulary files with term frequencies
 
 ## Files

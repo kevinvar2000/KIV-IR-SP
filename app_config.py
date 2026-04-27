@@ -15,6 +15,4 @@ PIPELINE_OPTIONS = [
     "baseline",
     "stemming",
     "lemmatization",
-    "stemming_no_diacritics",
-    "lemmatization_no_diacritics",
 ]

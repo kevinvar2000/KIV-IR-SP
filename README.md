@@ -38,25 +38,14 @@ This opens an interactive menu where you can:
 ### 2. Preprocessing + Indexing
 
 In interactive mode, preprocessing now:
-- lets you select input source file from `data/crawler` or type a custom path,
-- lets you choose document language (`cs`, `sk`, `en`),
-- lets you choose one or more pipelines,
-- automatically builds matching index files after preprocessing.
 
 Generated outputs:
-- docs: `data/preprocessed/docs_<pipeline>[ _<lang> ].jsonl`
-- vocab: `data/preprocessed/vocab_<pipeline>[ _<lang> ].txt`
-- index: `data/index/inverted_index_<pipeline>[ _<lang> ].json`
 
 Notes:
-- Czech (`cs`) remains default.
-- For Czech baseline, compatibility `data/preprocessed/vocab.txt` is still produced.
-
-### 3. Indexing Only
-
-Indexing-only mode expects already preprocessed docs (`docs_*.jsonl`).
-
-### 4. Retrieval
+ preprocessing text with multiple pipelines:
+    - baseline (removes diacritics)
+    - stemming (baseline + stemming)
+    - lemmatization (baseline + lemmatization)
 
 Interactive retrieval lets you choose a persisted index and then a method:
 - TF-IDF (ranked results with scores)
