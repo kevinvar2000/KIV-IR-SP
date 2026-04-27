@@ -43,9 +43,12 @@ Generated outputs:
 
 Notes:
  preprocessing text with multiple pipelines:
-    - baseline (removes diacritics)
+    - baseline (removes diacritics from all text)
     - stemming (baseline + stemming)
     - lemmatization (baseline + lemmatization)
+
+Notes:
+ - The baseline pipeline always removes diacritics from all text (Czech, Slovak, English).
 
 Interactive retrieval lets you choose a persisted index and then a method:
 - TF-IDF (ranked results with scores)

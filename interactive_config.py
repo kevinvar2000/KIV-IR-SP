@@ -38,7 +38,7 @@ LANGUAGE_MAP = {"czech (cs)": "cs", "slovak (sk)": "sk", "english (en)": "en"}
 
 # Pipeline selection
 PIPELINE_TITLE = "\nAvailable preprocessing pipelines for {language}:"
-PIPELINE_LINE_1 = "1. baseline (lowercase, remove punct/tags/URLs, remove stopwords, min-length 2)"
+PIPELINE_LINE_1 = "1. baseline (lowercase, remove punct/tags/URLs, remove stopwords, min-length 2, remove diacritics)"
 PIPELINE_LINE_2 = "2. stemming (baseline + language-aware stemming/lemmatization)"
 PIPELINE_LINE_3 = "3. lemmatization (baseline + language-aware lemmatization)"
 PIPELINE_LINES = [
