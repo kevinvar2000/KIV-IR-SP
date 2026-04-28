@@ -112,6 +112,9 @@ def normalize_docs(records: list[dict], text_key: str | list[str]) -> list[dict]
             continue
         parts: list[str] = []
         for key in keys:
+            # Prevent concatenating identifier/metadata fields into the document text
+            if key in ("id", "ids", "doc_id", "url"):
+                continue
             value = row.get(key)
             if isinstance(value, str):
                 stripped = value.strip()
@@ -122,6 +125,7 @@ def normalize_docs(records: list[dict], text_key: str | list[str]) -> list[dict]
             doc_id = row.get("doc_id") or row.get("id") or row.get("url") or f"doc_{idx}"
             docs.append(
                 {
+                    "id": str(doc_id),
                     "doc_id": str(doc_id),
                     "url": row.get("url"),
                     "text": "\n\n".join(parts),

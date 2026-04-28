@@ -54,6 +54,7 @@ def process_pipeline(
         processed_tokens = [token.processed_form for token in doc.tokens if token.processed_form]
         normalized_docs.append(
             {
+                "id": raw.get("id", raw["doc_id"]),
                 "doc_id": raw["doc_id"],
                 "url": raw.get("url"),
                 "tokens": processed_tokens,
@@ -96,6 +97,7 @@ def process_pipeline_to_files(
             vocab.update(processed_tokens)
 
             normalized_record = {
+                "id": raw.get("id", raw["doc_id"]),
                 "doc_id": raw["doc_id"],
                 "url": raw.get("url"),
                 "tokens": processed_tokens,
