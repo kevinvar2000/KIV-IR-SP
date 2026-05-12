@@ -40,6 +40,32 @@ CZECH_STOPWORDS: set[str] = {
     "zde", "ze", "ze", "zpet", "zprava", "zpravy",
 }
 
+# Optimized Czech stopwords - Pruned for Modern IR (BM25 / Vector Search)
+CZECH_STOPWORDS_OPTIMIZED: set[str] = {
+    # Conjunctions (Spojky)
+    "a", "aby", "ale", "ani", "aniz", "ano", "asi", "az", "bud", "coz", "ci", 
+    "i", "jak", "jako", "jakoz", "jestli", "jestlize", "kdyz", "nebot", "nebo", 
+    "necht", "pokud", "proto", "protoze", "tak", "takze", "tedy", "vsak", "ze",
+    
+    # Prepositions (Předložky)
+    "bez", "beze", "do", "k", "ke", "ku", "mezi", "na", "nad", "nade", "o", "od", 
+    "ode", "po", "pod", "podle", "pro", "pred", "prede", "pres", "prese", "pri", 
+    "s", "se", "u", "v", "ve", "z", "za",
+    
+    # Pronouns (Zájmena)
+    "co", "ho", "jaky", "jeho", "jej", "jeji", "jejich", "jemu", "jenz", "jez", 
+    "ji", "jich", "jimi", "ja", "kam", "kde", "kdo", "kdy", "ktery", "ktera", 
+    "ktere", "kteri", "me", "mi", "mne", "mnou", "muj", "my", "nam", "nas", "nase", 
+    "nasi", "nichz", "ni", "nim", "nimi", "on", "ona", "oni", "ono", "ony", "si", 
+    "sve", "svuj", "svym", "ta", "tam", "tato", "ten", "tento", "ti", "tim", "to", 
+    "toho", "tom", "tomu", "tu", "tuto", "tvuj", "ty", "tyto", "teto", "te", "tem", 
+    "vy", "vam", "vami", "vas",
+    
+    # Core Auxiliary Verbs (Pomocná slovesa - forms of "být" and negative)
+    "by", "byl", "byla", "byli", "bylo", "byly", "bys", "byt", "je", "jsi", "jsme", 
+    "jsou", "jste", "ne", "nebyl", "nebyla", "nebyli", "nebylo", "nebyly", "nejsou"
+}
+
 SLOVAK_STOPWORDS: set[str] = {
     "a", "aby", "aj", "ak", "ako", "ale", "ani", "ano", "asi", "aspon",
     "bez", "bol", "bola", "boli", "bolo", "by", "byt", "cez", "co", "dakedy",
@@ -78,7 +104,7 @@ LANGUAGE_ALIASES: dict[str, str] = {
     "english language": "en",
 }
 LANGUAGE_STOPWORDS: dict[str, set[str]] = {
-    "cs": CZECH_STOPWORDS,
+    "cs": CZECH_STOPWORDS_OPTIMIZED,
     "sk": SLOVAK_STOPWORDS,
     "en": ENGLISH_STOPWORDS,
 }

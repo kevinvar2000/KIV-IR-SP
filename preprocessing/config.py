@@ -31,6 +31,7 @@ def build_base_steps(language: str = "cs") -> list:
     return [
         LowercasePreprocessor(),
         RemoveTokenTypesPreprocessor({TokenType.PUNCT, TokenType.TAG, TokenType.URL}),
+        RemoveDiacriticsPreprocessor(),
         StopwordPreprocessor(language=normalized_language),
         MinLengthPreprocessor(min_length=2),
     ]
@@ -41,7 +42,7 @@ def build_pipelines(language: str = "cs") -> dict[str, PreprocessingPipeline]:
     normalized_language = normalize_language_code(language)
     base_steps = build_base_steps(normalized_language)
     return {
-        "baseline": PreprocessingPipeline([*base_steps, RemoveDiacriticsPreprocessor()]),
-        "stemming": PreprocessingPipeline([*base_steps, StemmingPreprocessor(normalized_language), RemoveDiacriticsPreprocessor()]),
-        "lemmatization": PreprocessingPipeline([*base_steps, LemmatizationPreprocessor(normalized_language), RemoveDiacriticsPreprocessor()]),
+        "baseline": PreprocessingPipeline([*base_steps]),
+        "stemming": PreprocessingPipeline([*base_steps, StemmingPreprocessor(normalized_language)]),
+        "lemmatization": PreprocessingPipeline([*base_steps, LemmatizationPreprocessor(normalized_language)]),
     }
