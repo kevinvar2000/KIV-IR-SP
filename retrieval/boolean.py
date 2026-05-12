@@ -165,17 +165,29 @@ class BooleanScorer:
 
     def search(self, query_text: str) -> List[Tuple[str, float]]:
         """Run full Boolean retrieval pipeline and return sorted matches."""
-        infix_tokens = self._tokenize_query(query_text)
-        if not infix_tokens:
+        try:
+            infix_tokens = self._tokenize_query(query_text)
+            if not infix_tokens:
+                self.last_debug = {
+                    "infix_tokens": [],
+                    "postfix_tokens": [],
+                    "hit_count": 0,
+                }
+                return []
+
+            postfix_tokens = self._infix_to_postfix(infix_tokens)
+            result_set = self._evaluate_postfix(postfix_tokens)
+        except ValueError as e:
             self.last_debug = {
+                "error": str(e),
                 "infix_tokens": [],
                 "postfix_tokens": [],
                 "hit_count": 0,
             }
+            if self.debug:
+                print(f"[debug][boolean] error={e}")
             return []
 
-        postfix_tokens = self._infix_to_postfix(infix_tokens)
-        result_set = self._evaluate_postfix(postfix_tokens)
         result_docs = sorted(result_set)
 
         self.last_debug = {

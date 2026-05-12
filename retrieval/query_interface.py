@@ -9,7 +9,7 @@ from preprocessing.config import PIPELINE_NAMES, build_pipelines
 from preprocessing.language_config import normalize_language_code
 from preprocessing.tokenizer import RegexMatchTokenizer
 
-from .tfidf import CosineScorer, InvertedIndex
+from .tfidf import CosineScorer, InvertedIndex, BM25Scorer
 from .boolean import BooleanIndex, BooleanScorer
 from .dataset import Preprocessor
 
@@ -274,11 +274,15 @@ def _format_results(results: list[tuple[str, float]], method: str, metadata: dic
     # Header
     if method == "tfidf":
         lines.append(ui.DIVIDER)
-        lines.append(ui.QUERY_FORMAT_HEADER_TFIDF)
+        lines.append(" TF-IDF RANKED RESULTS")
+        lines.append("-" * 60)
+    elif method == "bm25":
+        lines.append(ui.DIVIDER)
+        lines.append(" OKAPI BM25 RANKED RESULTS")
         lines.append("-" * 60)
     else:
         lines.append(ui.DIVIDER)
-        lines.append(ui.QUERY_FORMAT_HEADER_BOOLEAN)
+        lines.append(" BOOLEAN RESULTS")
         lines.append("-" * 60)
     
     for rank, (doc_id, score) in enumerate(limited, start=1):
@@ -293,7 +297,7 @@ def _format_results(results: list[tuple[str, float]], method: str, metadata: dic
         if len(title) > 30:
             title = title[:27] + "..."
         
-        if method == "tfidf":
+        if method in ("tfidf", "bm25"):
             score_str = f"{score:.4f}".rjust(6)
             lines.append(f"│ {rank:2d}  │ {score_str} │ {title:33s} │ {doc_url[:30]:30s}")
         else:  # boolean
@@ -396,24 +400,26 @@ def _print_debug_hits(
 
 
 def _ask_search_method() -> str | None:
-    """Ask user to choose between TF-IDF and Boolean search."""
+    """Ask user to choose between TF-IDF, BM25, and Boolean search."""
     print("\n" + ui.DIVIDER)
-    print(ui.QUERY_METHOD_TITLE)
+    print(" CHOOSE SEARCH METHOD")
     print(ui.DIVIDER)
-    print(ui.QUERY_METHOD_LINE_1)
-    print(ui.QUERY_METHOD_LINE_2)
-    print(ui.QUERY_METHOD_LINE_0)
+    print(" 1. TF-IDF Vector Space Model")
+    print(" 2. Okapi BM25 Probabilistic Model")
+    print(" 3. Boolean Search (AND, OR, NOT)")
+    print(" 0. Back to Main Menu")
     print(ui.DIVIDER)
     
     while True:
-        choice = input(ui.PROMPT_QUERY_METHOD).strip().lower()
-        if choice in ("1", "2"):
-            return "tfidf" if choice == "1" else "boolean"
-        if choice in ui.HOME_COMMANDS:
+        choice = input("Select method (1/2/3/0): ").strip().lower()
+        if choice == "1": return "tfidf"
+        if choice == "2": return "bm25"
+        if choice == "3": return "boolean"
+        if choice in ("0", "back", "home", "q", "quit"):
             return None
         if choice in ui.EXIT_COMMANDS:
             return ui.APP_EXIT_SIGNAL
-        print(ui.QUERY_METHOD_INVALID)
+        print("Invalid choice. Please enter 1, 2, 3, or 0.")
 
 
 def _build_boolean_index_from_tfidf_docs(index: InvertedIndex) -> BooleanIndex:
@@ -547,6 +553,7 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
     boolean_index = _build_boolean_index_from_tfidf_docs(tfidf_index)
     boolean_scorer = BooleanScorer(boolean_index, query_preprocessor, debug=False)
     tfidf_scorer = CosineScorer(tfidf_index, query_preprocessor)
+    bm25_scorer = BM25Scorer(tfidf_index, query_preprocessor)
     
     search_method = _ask_search_method()
     if search_method == ui.APP_EXIT_SIGNAL:
@@ -598,6 +605,10 @@ def run_interactive_query_loop(index_file: str, pipeline: str, doc_texts: dict[s
 
                 if search_method == "tfidf":
                     ranked = tfidf_scorer.search(query_text)
+                    print(ui.QUERY_TOTAL_FOUND.format(count=len(ranked)))
+                    print(ui.QUERY_RESULTS_FOUND.format(count=len(ranked)))
+                elif search_method == "bm25":
+                    ranked = bm25_scorer.search(query_text)
                     print(ui.QUERY_TOTAL_FOUND.format(count=len(ranked)))
                     print(ui.QUERY_RESULTS_FOUND.format(count=len(ranked)))
                 else:  # boolean

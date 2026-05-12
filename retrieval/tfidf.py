@@ -59,6 +59,8 @@ class InvertedIndex:
         self.idf: Dict[str, float] = {}
         self.doc_vectors: Dict[str, Dict[str, float]] = {}
         self.doc_norms: Dict[str, float] = {}
+        self.doc_lengths: Dict[str, int] = {}
+        self.avgdl: float = 0.0
         self.num_docs: int = 0
 
     def build(self, documents: Dict[str, str], preprocessor) -> None:
@@ -71,9 +73,12 @@ class InvertedIndex:
             term_freqs: Dict[str, int] = {}
 
             # Tokenize and count terms for this document.
+            doc_len = 0
             for term in preprocessor.tokenize(text):
                 term_freqs[term] = term_freqs.get(term, 0) + 1
+                doc_len += 1
 
+            self.doc_lengths[doc_id] = doc_len
             # Store term frequencies for later vector construction.
             self.doc_term_freqs[doc_id] = term_freqs
 
@@ -89,6 +94,11 @@ class InvertedIndex:
         # Compute IDF for each term.
         for term, df in self.doc_freq.items():
             self.idf[term] = math.log10(self.num_docs / df) if df > 0 else 0.0
+
+        if self.num_docs > 0:
+            self.avgdl = sum(self.doc_lengths.values()) / self.num_docs
+        else:
+            self.avgdl = 0.0
 
         # Compute TF-IDF vectors and norms for each document.
         for doc_id, term_freqs in self.doc_term_freqs.items():
@@ -109,6 +119,8 @@ class InvertedIndex:
                 "postings": self.postings,
                 "doc_freq": self.doc_freq,
                 "idf": self.idf,
+                "doc_lengths": self.doc_lengths,
+                "avgdl": self.avgdl,
                 "num_docs": self.num_docs,
             }
 
@@ -119,6 +131,8 @@ class InvertedIndex:
             "idf": self.idf,
             "doc_vectors": self.doc_vectors,
             "doc_norms": self.doc_norms,
+            "doc_lengths": self.doc_lengths,
+            "avgdl": self.avgdl,
             "num_docs": self.num_docs,
         }
 
@@ -198,6 +212,16 @@ class InvertedIndex:
         index.num_docs = cls._resolve_num_docs(payload, index.postings, index.doc_term_freqs)
         index.doc_freq = cls._resolve_doc_freq(payload, index.postings)
         index.idf = cls._resolve_idf(payload, index.doc_freq, index.num_docs)
+
+        raw_doc_lengths = payload.get("doc_lengths", {})
+        if isinstance(raw_doc_lengths, dict) and raw_doc_lengths:
+            index.doc_lengths = {str(doc_id): int(l) for doc_id, l in raw_doc_lengths.items()}
+        else:
+            index.doc_lengths = {}
+            for doc_id, terms in index.doc_term_freqs.items():
+                index.doc_lengths[doc_id] = sum(terms.values())
+        
+        index.avgdl = float(payload.get("avgdl", sum(index.doc_lengths.values()) / max(1, index.num_docs)))
 
         raw_doc_vectors = payload.get("doc_vectors", {})
         raw_doc_norms = payload.get("doc_norms", {})
@@ -294,5 +318,53 @@ class CosineScorer:
             for doc_id in candidate_docs
         ]
         scored = [(doc_id, score) for doc_id, score in scored if score > 0]
+        scored.sort(key=lambda x: (-x[1], x[0]))
+        return scored
+
+
+class BM25Scorer:
+    """Scores every document against a query using the Okapi BM25 algorithm."""
+
+    def __init__(self, index: InvertedIndex, preprocessor, k1: float = 1.5, b: float = 0.75) -> None:
+        """Bind scorer to an index and query tokenizer/preprocessor."""
+        self.index = index
+        self.preprocessor = preprocessor
+        self.k1 = k1
+        self.b = b
+
+    def search(self, query_text: str) -> List[Tuple[str, float]]:
+        """Score documents using BM25 and return ranked results."""
+        query_tf: Dict[str, int] = {}
+        for term in self.preprocessor.tokenize(query_text):
+            query_tf[term] = query_tf.get(term, 0) + 1
+
+        if not query_tf:
+            return []
+
+        scores: Dict[str, float] = {}
+        N = self.index.num_docs
+        avgdl = self.index.avgdl
+        if avgdl == 0:
+            avgdl = 1.0
+
+        for term, q_tf in query_tf.items():
+            if term not in self.index.postings:
+                continue
+            
+            df = self.index.doc_freq.get(term, 0)
+            # Standard BM25 IDF formulation
+            idf = math.log(1.0 + (N - df + 0.5) / (df + 0.5))
+            if idf < 0:
+                idf = 0.0
+            
+            for doc_id, tf in self.index.postings[term].items():
+                dl = self.index.doc_lengths.get(doc_id, avgdl)
+                if dl == 0:
+                    dl = 1.0
+
+                tf_component = (tf * (self.k1 + 1)) / (tf + self.k1 * (1 - self.b + self.b * (dl / avgdl)))
+                scores[doc_id] = scores.get(doc_id, 0.0) + (idf * tf_component * q_tf)
+
+        scored = [(doc_id, score) for doc_id, score in scores.items() if score > 0]
         scored.sort(key=lambda x: (-x[1], x[0]))
         return scored

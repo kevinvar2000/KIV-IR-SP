@@ -30,7 +30,7 @@ from preprocessing.config import build_pipelines
 from preprocessing.language_config import normalize_language_code
 from preprocessing.tokenizer import RegexMatchTokenizer
 from retrieval.boolean import BooleanIndex, BooleanScorer
-from retrieval.tfidf import CosineScorer, InvertedIndex
+from retrieval.tfidf import CosineScorer, InvertedIndex, BM25Scorer
 
 
 TEXT_KEYS = (
@@ -142,9 +142,12 @@ class LocalIndex(Index):
 class LocalSearchEngine(SearchEngine):
     """Adapter implementing assignment search API over current project retrieval code."""
 
-    def __init__(self, index: LocalIndex):
+    def __init__(self, index: LocalIndex, scorer_type: str = "bm25"):
         super().__init__(index)
-        self.ranked = CosineScorer(index.tfidf_index, index.tokenizer)
+        if scorer_type == "bm25":
+            self.ranked = BM25Scorer(index.tfidf_index, index.tokenizer)
+        else:
+            self.ranked = CosineScorer(index.tfidf_index, index.tokenizer)
         self.boolean = BooleanScorer(index.boolean_index, index.tokenizer)
 
     def search(self, query: str) -> list[tuple[str, float]]:
@@ -157,6 +160,9 @@ class LocalSearchEngine(SearchEngine):
 def run_trec_eval(trec_eval_bin: str | Path, gold_file: Path, results_file: Path) -> tuple[int, str, str]:
     """Run trec_eval if binary is available and return (returncode, stdout, stderr)."""
     bin_path = Path(trec_eval_bin)
+    if not bin_path.exists() and bin_path.with_suffix(".exe").exists():
+        bin_path = bin_path.with_suffix(".exe")
+
     if not bin_path.exists():
         return 127, "", f"trec_eval binary not found: {bin_path}"
 
@@ -180,7 +186,11 @@ def evaluate_ranked(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as file_handle:
         for query in queries:
-            ranked = search_engine.search(query["text"])
+            try:
+                ranked = search_engine.search(query["text"])
+            except Exception as e:
+                print(f"[!] Warning: Ranked query '{query['id']}' failed: {e}", file=sys.stderr)
+                ranked = []
             for rank, (doc_id, score) in enumerate(ranked[:top_k], start=1):
                 file_handle.write(f"{query['id']} Q0 {doc_id} {rank} {score:.6f} {run_id}\n")
 
@@ -193,8 +203,12 @@ def evaluate_boolean(search_engine: LocalSearchEngine, queries_file: Path) -> di
             query = line.strip()
             if not query:
                 continue
-            results = search_engine.boolean_search(query)
-            hit_counts[f"bq{idx}"] = len(results)
+            try:
+                results = search_engine.boolean_search(query)
+                hit_counts[f"bq{idx}"] = len(results)
+            except Exception as e:
+                print(f"[!] Warning: Boolean query '{query}' failed: {e}", file=sys.stderr)
+                hit_counts[f"bq{idx}"] = 0
     return hit_counts
 
 
@@ -203,9 +217,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset", choices=("eval_data_cs", "eval_data_en"), default="eval_data_cs")
     parser.add_argument("--pipeline", default="baseline", help="Preprocessing pipeline for index/query normalization.")
     parser.add_argument("--language", default="cs", choices=("cs", "sk", "en"))
+    parser.add_argument("--scorer", default="tfidf", choices=("tfidf", "bm25"), help="Ranking model to use.")
     parser.add_argument("--top-k", type=int, default=1000)
     parser.add_argument("--run-id", default="runindex1")
-    parser.add_argument("--trec-eval-bin", default="trec_eval-main/trec_eval")
+    default_bin = "trec_eval-main/trec_eval.exe" if sys.platform == "win32" else "trec_eval-main/trec_eval"
+    parser.add_argument("--trec-eval-bin", default=default_bin)
     parser.add_argument("--skip-trec-eval", action="store_true")
     parser.add_argument("--run-boolean", action="store_true")
     return parser.parse_args()
@@ -241,7 +257,7 @@ def main() -> int:
     index.index_documents(raw_documents)
     indexing_seconds = time.perf_counter() - t0
 
-    search_engine = LocalSearchEngine(index)
+    search_engine = LocalSearchEngine(index, scorer_type=args.scorer)
     t1 = time.perf_counter()
     evaluate_ranked(search_engine, queries, trec_results_file, args.run_id, max(1, args.top_k))
     ranked_seconds = time.perf_counter() - t1
@@ -267,6 +283,7 @@ def main() -> int:
             "dataset": args.dataset,
             "pipeline": args.pipeline,
             "language": args.language,
+            "scorer": args.scorer,
             "query_count": len(queries),
             "document_count": len(index.documents),
             "run_id": args.run_id,
