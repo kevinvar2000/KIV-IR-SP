@@ -51,6 +51,7 @@ Notes:
  - The baseline pipeline always removes diacritics from all text (Czech, Slovak, English).
 
 Interactive retrieval lets you choose a persisted index and then a method:
+- BM25 (highly optimized ranking, fastest)
 - TF-IDF (ranked results with scores)
 - Boolean (`AND`, `OR`, `NOT`)
 

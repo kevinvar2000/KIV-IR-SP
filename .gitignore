@@ -26,3 +26,5 @@ data/*
 
 # Optional: keep empty dirs tracked if needed
 !data/**/.gitkeep
+
+trec_eval-main/*

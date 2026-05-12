@@ -9,7 +9,8 @@ from preprocessing.config import PIPELINE_NAMES, build_pipelines
 from preprocessing.language_config import normalize_language_code
 from preprocessing.tokenizer import RegexMatchTokenizer
 
-from .tfidf import CosineScorer, InvertedIndex, BM25Scorer
+from .scoring import CosineScorer, BM25Scorer
+from indexing.inverted_index import InvertedIndex
 from .boolean import BooleanIndex, BooleanScorer
 from .dataset import Preprocessor
 
