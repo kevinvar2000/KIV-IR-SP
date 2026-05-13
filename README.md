@@ -67,7 +67,8 @@ The system's performance was evaluated using standard `trec_eval` metrics on the
 ### Data Setup
 - Evaluation data (`documents.json`, `full_text_queries.json`, `czech_stopwords.txt`, etc.) should be placed in the root directory under `data/eval_data_cs/` or `data/eval_data_en/`.
 - Downloaded pre-processed datasets (if any) can be placed in `data/`.
-- **Link to downloaded dataset (gapps.zcu.cz):** `[INSERT YOUR GOOGLE DRIVE LINK HERE]`
+- **Dataset Link:** Download from Google Drive. After downloading, extract the contents into the `data/` directory.
+- https://drive.google.com/file/d/1oYKwR-O_po-GtoacoVF3typPUZABlURP/view?usp=sharing
 
 ### Execution
 The entire pipeline is glued together via a single entry point. Start the interactive console by running:
