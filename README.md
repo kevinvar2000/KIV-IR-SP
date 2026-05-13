@@ -1,217 +1,82 @@
-# Information Retrieval Pipeline
+# Information Retrieval System
 
-A modular Python project for:
-- crawling web pages,
-- preprocessing text with multiple pipelines,
-- building persisted inverted indexes,
-- running TF-IDF or Boolean retrieval.
+**Author:** Kevin Varchola
 
-The project now runs primarily through one interactive entry point.
+---
 
-## Quick Start
+This document provides an overview of the Information Retrieval System project, including its features, performance metrics, and instructions on how to run it.
 
-Install dependencies:
+## Features
 
-```bash
-pip install beautifulsoup4 requests simplemma
-```
+The project implements a complete Information Retrieval pipeline from scratch, completely avoiding external search platforms like Lucene, Solr, or Elasticsearch.
 
-Run the app:
+### Mandatory Features
+- **Custom In-Memory Indexer:** A custom two-pass algorithm builds an inverted index, calculating TF and IDF distributions.
+- **Vector Space Model (TF-IDF):** Implements log-normalized Term Frequency and Inverse Document Frequency with Cosine Similarity scoring.
+- **Boolean Model:** Supports `AND`, `OR`, `NOT` operators.
+- **Parentheses & Precedence:** Fully supports overriding operator precedence using parentheses `( )`.
+- **Batch Evaluation:** Implements automated generation of `trec_eval` compatible 6-column run files (`qid iter docno rank sim run_id`).
+- **Independent Indexing:** Supports independently indexing crawled web data and evaluation datasets.
 
+### Extra Credit Features
+- **Okapi BM25 Scoring Model:** Implemented alongside TF-IDF, utilizing probabilistic term frequency saturation ($k_1$) and document length normalization ($b$). This improved the Czech MAP score by ~80% over TF-IDF.
+- **Custom Boolean Query Parser:** Built an entirely custom parser using the **Shunting-yard algorithm** to convert infix query notation (e.g., `A AND (B OR NOT C)`) to postfix notation, evaluated using native Python set mathematics.
+- **File-based Indexing & Persistence:** The in-memory index is serialized to disk using a custom `compact-v2` JSON format. Redundant data (like heavy TF-IDF document vectors) are dropped during save and rapidly recomputed upon loading, saving hundreds of megabytes of disk space.
+- **Multi-language NLP Support:** Language-aware pipelines for Czech, Slovak, and English, utilizing dedicated stopwords and morphological processing.
+- **Stemming & Lemmatization:** Employs custom suffix-stripping stemmers and integrates `simplemma` for robust lemmatization.
+- **HTML Tag Handling:** Safely sanitizes crawled markup utilizing a custom `RegexMatchTokenizer` before building the index.
+- **Keyword-In-Context (KWIC) Highlighting:** Dynamic retrieval UI displaying snippets of matched documents with query terms distinctly highlighted (`[[term]]`).
+- **Interactive CLI UI:** A highly polished, menu-driven command-line interface that glues the crawler, preprocessor, indexer, and search engines together.
+
+---
+
+## Performance Report
+
+The system's performance was evaluated using standard `trec_eval` metrics on the provided datasets. The implementation of the **Okapi BM25** probabilistic model yielded a massive improvement over the baseline TF-IDF model, particularly for the highly inflected Czech language, bringing the **MAP score to ~0.19**. English language evaluation achieved a **MAP of ~0.54**.
+
+### Highest Achieved Scores
+- **Czech (BM25 + Stemming):** MAP = **0.1914** | P@10 = 0.2220
+- **English (BM25 + Stemming):** MAP = **0.5446** | P@10 = 0.1900
+
+### Full TREC Metrics Overview
+
+| Dataset | Language | Pipeline | Scorer | MAP | P@10 | NDCG | MRR |
+|---------|----------|----------|--------|-----|------|------|-----|
+| eval_data_cs | cs | `baseline` | **TFIDF** | 0.0925 | 0.1060 | 0.2978 | 0.2052 |
+| eval_data_cs | cs | `baseline` | **BM25** | 0.1677 | 0.1980 | 0.3815 | 0.4213 |
+| eval_data_cs | cs | `stemming` | **TFIDF** | 0.1088 | 0.1180 | 0.3277 | 0.2276 |
+| eval_data_cs | cs | `stemming` | **BM25** | **0.1914** | **0.2220** | 0.4185 | 0.4531 |
+| eval_data_cs | cs | `lemmatization` | **TFIDF** | 0.1227 | 0.1440 | 0.3406 | 0.2532 |
+| eval_data_cs | cs | `lemmatization` | **BM25** | 0.1903 | 0.2260 | **0.4246** | **0.4801** |
+| eval_data_en | en | `baseline` | **TFIDF** | 0.5433 | 0.1860 | 0.6760 | 0.7011 |
+| eval_data_en | en | `stemming` | **BM25** | **0.5446** | **0.1900** | **0.6793** | **0.7113** |
+
+*Note: Indexing time for 81,734 Czech documents is ~5 minutes. Ranked searches evaluate in ~1.6 seconds across the entire batch.*
+
+---
+
+## How to Run
+
+### Requirements
+- **Python:** Version 3.10 or higher.
+- **Dependencies:** Install required libraries using `pip`:
+  ```bash
+  pip install beautifulsoup4 requests simplemma
+  ```
+
+### Data Setup
+- Evaluation data (`documents.json`, `full_text_queries.json`, `czech_stopwords.txt`, etc.) should be placed in the root directory under `data/eval_data_cs/` or `data/eval_data_en/`.
+- Downloaded pre-processed datasets (if any) can be placed in `data/`.
+- **Link to downloaded dataset (gapps.zcu.cz):** `[INSERT YOUR GOOGLE DRIVE LINK HERE]`
+
+### Execution
+The entire pipeline is glued together via a single entry point. Start the interactive console by running:
 ```bash
 python main.py
 ```
 
-This opens an interactive menu where you can:
-1. run crawler (foreground or background),
-2. run preprocessing + indexing,
-3. run indexing from existing preprocessed docs,
-4. run retrieval.
-
-## Current Workflow
-
-### 1. Crawler
-
-- Crawls site content and stores JSONL output in `data/crawler/crawled_pages.json`.
-- Background mode writes logs to `data/crawler/crawler.log`.
-
-### 2. Preprocessing + Indexing
-
-In interactive mode, preprocessing now:
-
-Generated outputs:
-
-Notes:
- preprocessing text with multiple pipelines:
-    - baseline (removes diacritics from all text)
-    - stemming (baseline + stemming)
-    - lemmatization (baseline + lemmatization)
-
-Notes:
- - The baseline pipeline always removes diacritics from all text (Czech, Slovak, English).
-
-Interactive retrieval lets you choose a persisted index and then a method:
-- BM25 (highly optimized ranking, fastest)
-- TF-IDF (ranked results with scores)
-- Boolean (`AND`, `OR`, `NOT`)
-
-Boolean mode now uses the real indexed term space (from persisted index postings), not placeholder text.
-
-Standalone Boolean CLI also supports reading queries from a plain text file (one query per line):
-
-```bash
-python -m retrieval.boolean_search path/to/collection.txt --query-file path/to/boolean_queries.txt
-```
-
-## Inverted Index Format (Example)
-
-Persisted index files are stored in:
-- `data/index/inverted_index_<pipeline>[ _<lang> ].json`
-
-Current JSON structure is:
-
-```json
-{
-    "meta": {
-        "pipeline": "baseline",
-        "source_file": ".../data/preprocessed/docs_baseline.jsonl",
-        "doc_count": 81730,
-        "documents_sha256": "..."
-    },
-    "index": {
-        "postings": {
-            "term_a": {
-                "doc_1": 3,
-                "doc_25": 1
-            }
-        },
-        "doc_term_freqs": {
-            "doc_1": {
-                "term_a": 3,
-                "term_b": 2
-            }
-        },
-        "doc_freq": {
-            "term_a": 120
-        },
-        "idf": {
-            "term_a": 2.34567
-        },
-        "doc_vectors": {
-            "doc_1": {
-                "term_a": 4.12345,
-                "term_b": 2.00000
-            }
-        },
-        "doc_norms": {
-            "doc_1": 6.78901
-        },
-        "num_docs": 81730
-    }
-}
-```
-
-Note: New indexes are persisted in a compact format (`index_format=compact-v2`) to reduce file size.
-In compact mode, only core structures are stored (`postings`, `doc_freq`, `idf`, `num_docs`),
-and `doc_term_freqs` / `doc_vectors` / `doc_norms` are reconstructed on load.
-Older full-format indexes remain supported.
-
-Field types:
-- `meta`: `dict`
-- `meta.pipeline`: `str`
-- `meta.source_file`: `str`
-- `meta.doc_count`: `int`
-- `meta.documents_sha256`: `str`
-- `index.postings`: `dict[str, dict[str, int]]` (term -> doc_id -> raw TF)
-- `index.doc_term_freqs`: `dict[str, dict[str, int]]` (doc_id -> term -> raw TF)
-- `index.doc_freq`: `dict[str, int]` (term -> DF)
-- `index.idf`: `dict[str, float]` (term -> IDF)
-- `index.doc_vectors`: `dict[str, dict[str, float]]` (doc_id -> term -> TF-IDF weight)
-- `index.doc_norms`: `dict[str, float]` (doc_id -> L2 norm)
-- `index.num_docs`: `int`
-
-Size notes:
-- Index files can be large because both raw frequencies and TF-IDF vectors are persisted.
-- In this repository, `data/index/inverted_index_baseline.json` is currently around 664 MB on disk.
-- Interactive retrieval shows the selected index file size before query mode starts.
-
-## Query Preprocessing Consistency
-
-Query preprocessing is aligned with the index pipeline:
-- pipeline type is read from index metadata (or selected file name),
-- language suffix (`_cs`, `_sk`, `_en`) is resolved,
-- the same preprocessing pipeline/language combination is applied to queries.
-
-This applies to both TF-IDF and Boolean query paths.
-
-## Project Structure
-
-```text
-.
-├── main.py
-├── app_config.py
-├── interactive.py
-├── runner.py
-├── crawler/
-│   ├── crawler.py
-│   └── README.md
-├── preprocessing/
-│   ├── config.py
-│   ├── language_config.py
-│   ├── dataset.py
-│   ├── orchestration.py
-│   ├── preprocess.py
-│   ├── tokenizer.py
-│   ├── main.py
-│   └── README.md
-├── indexing/
-│   └── main.py
-├── retrieval/
-│   ├── tfidf.py
-│   ├── tfidf_search.py
-│   ├── boolean.py
-│   ├── query_interface.py
-│   ├── dataset.py
-│   ├── workflow.py
-│   ├── reporting.py
-│   ├── scoring.py
-│   └── boolean_search.py
-└── data/
-    ├── crawler/
-    ├── preprocessed/
-    └── index/
-```
-
-## Configuration
-
-### Global config
-
-See `app_config.py`:
-- `ROOT`
-- `CRAWLER_SCRIPT`
-- `CRAWLER_DATA_FILE`
-- `CRAWLER_LOG_FILE`
-- `PREPROCESSED_DIR`
-- `INDEX_DIR`
-- `PIPELINE_OPTIONS`
-
-### Crawler config
-
-Tune crawler settings directly in `crawler/crawler.py` (request delay, max URLs, robots/sitemap handling, URL filtering).
-
-### Preprocessing config
-
-See `preprocessing/config.py` for pipeline definitions.
-
-Language resources are centralized in:
-- `preprocessing/language_config.py`
-
-## Legacy/Standalone Module Notes
-
-Some submodules still contain standalone `main()` functions (for direct module execution), but the intended user flow is interactive via `python main.py`.
-
-## Troubleshooting
-
-- If retrieval finds no index files, run preprocessing + indexing first.
-- If Boolean returns no matches for expected terms, verify you selected the intended index file and language variant.
-- If a query has terms unseen in the selected index, both TF-IDF and Boolean may return no results.
+This launches the main orchestrator menu:
+1. **Run Crawler:** Start the web scraper (foreground or background).
+2. **Preprocess & Index:** Select a raw data file (like `documents.json` or `crawled_pages.json`). The system will auto-detect text fields, ask for the language, process the text, and generate `inverted_index_*.json` files.
+3. **Index preprocessed docs:** Build an index from an already normalized `.jsonl` document stream.
+4. **Run Retrieval:** Select an existing index from the menu, choose your scoring model (TF-IDF, BM25, or Boolean), and type your queries interactively.
